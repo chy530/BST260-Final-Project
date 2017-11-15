@@ -1,0 +1,50 @@
+---
+title: "SVM iris"
+output: html_document
+---
+http://rischanlab.github.io/SVM.html
+
+Use library e1071, you can install it using install.packages(“e1071”). Load library
+```{r}
+library(e1071)
+head(iris,5)
+```
+
+Using Iris data
+```{r}
+attach(iris)
+```
+
+Divide Iris data to x (containt the all features) and y only the classes
+```{r}
+x <- subset(iris, select=-Species)
+y <- Species
+```
+
+Create SVM Model and show summary
+```{r}
+svm_model <- svm(Species ~ ., data=iris)
+summary(svm_model)
+```
+
+Run Prediction and you can measuring the execution time in R
+```{r}
+pred <- predict(svm_model,x)
+system.time(pred <- predict(svm_model,x))
+```
+
+See the confusion matrix result of prediction, using command table to compare the result of SVM prediction and the class data in y variable.
+```{r}
+table(pred,y)
+```
+
+TUning SVM to find the best cost and gamma ..
+```{r}
+svm_tune <- tune(svm, train.x=x, train.y=y, 
+              kernel="radial", ranges=list(cost=10^(-1:2), gamma=c(.5,1,2)))
+
+print(svm_tune)
+```
+
+
+

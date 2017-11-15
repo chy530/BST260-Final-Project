@@ -1,0 +1,137 @@
+---
+title: "baseball02a"
+output: html_document
+---
+
+Silver Slugger Random Forest
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball")
+awards <- read.csv("player_award.csv",stringsAsFactors=FALSE)
+batting <- read.csv("batting.csv",stringsAsFactors=FALSE)
+teams <- read.csv("team.csv",stringsAsFactors=FALSE)
+```
+
+```{r}
+yearcut = 1979
+awards <- awards %>% filter(year > yearcut)
+batting <- batting %>% filter(year > yearcut)
+
+wlyear <- teams %>% filter(year > yearcut)
+wlyear <- wlyear[, names(wlyear) %in% c("year","team_id","rank","w","l")]
+wlyear <- wlyear %>% mutate(wlratio = w/l)
+batting <- merge(batting,wlyear,by=c("year","team_id"),all=TRUE)
+```
+
+Calculate On-base Plus Slugging (OPS)
+```{r}
+batting$player_id <- as.character(batting$player_id)
+batting <- batting[order(batting$player_id,batting$year),]
+batting <- batting %>% mutate(single=h-(double+triple+hr), #singles
+                              tb=single*1+double*2+triple*3+hr*4, #total bases
+                              slg=tb/ab, #slugging
+                              obp=(h+bb+hbp)/(ab+bb+sf+hbp), #on base percentage
+                              ops=slg+obp)
+```
+
+Merge Silver Slugger data, create training and testing data
+```{r}
+silvslug <- awards %>% filter(award_id=="Silver Slugger")
+silvslug <- silvslug %>% mutate(ssa = 1)
+
+ssbat <- merge(batting,silvslug,by=c("player_id","year"),all=TRUE)
+ssbat$ssa[is.na(ssbat$ssa)] <- 0
+ssbat[is.na(ssbat)]<-0
+ssbat$ssa <- as.factor(ssbat$ssa)
+
+drops <- c("g_idp","award_id","tie","notes","sh","sf","league_id.x","league_id.y","team_id","pos","player_id")
+ssbat <- ssbat[ , !(names(ssbat) %in% drops)]
+ssbat <- ssbat[complete.cases(ssbat),]
+
+#sstrain <- ssbat %>% filter(year < 2011)
+#sstest <- ssbat %>% filter(year > 2010)
+sstrain <- ssbat %>% filter(year %% 2 == 0)
+sstest <- ssbat %>% filter(year %% 2 == 1)
+
+```
+
+```{r}
+sstrain2 = sstrain
+sstest2 = sstest
+
+ranks <- function(years,dframe){
+  sorted = dframe %>% filter(year == years[1])
+  for (i in 3:25){
+    sorted[i] = sorted[i]/max(sorted[i])
+  }
+  for (i in 2:length(years)){
+    #print(years[i])
+    sortyear = dframe %>% filter(year == years[i])
+    for (i in 3:25){
+      sortyear[i] = sortyear[i]/max(sortyear[i])
+      #sortyear[i] = log(1-sortyear[i]/max(sortyear[i])+0.0001)
+    }
+    sorted = rbind(sorted,sortyear)
+  }
+  sorted
+}
+
+#yearrange = c((yearcut+1):2010)
+yearrange = unique(sstrain$year)
+sstrain2 = ranks(yearrange,sstrain2)
+#sstrain <- sstrain[order(sstrain$year,sstrain$g),]
+#sstrain2 <- sstrain2[order(sstrain2$year,sstrain2$g),]
+sstrain2 <- sstrain2[order(sstrain2$ssa),]
+
+nullct <- tabulate(sstrain2$ssa)[1] #nulls
+#remind = sample(nullct,nullct-1500)
+#sstrain3 <- sstrain2[-remind,]
+sstrain3 = sstrain2
+
+#yearrange2 = c(2011:2015)
+yearrange2 = unique(sstest$year)
+sstest2 = ranks(yearrange2,sstest2)
+
+
+```
+
+
+```{r}
+library(randomForest)
+model <- randomForest(ssa ~ . , data = sstrain3, ntree = 500, mtry = 5)
+model
+```
+
+```{r}
+pred <- predict(model, newdata = sstrain3)
+table(pred, sstrain3$ssa)
+```
+
+```{r}
+pred <- predict(model, newdata = sstrain2)
+table(pred, sstrain2$ssa)
+```
+
+```{r}
+pred <- predict(model, newdata = sstest2)
+table(pred, sstest2$ssa)
+```
+
+```{r}
+keep <- c("wlratio","slg","obp","ops","ssa")
+sstrain4 <- sstrain3[ , (names(sstrain3) %in% keep)]
+
+model2 <- randomForest(ssa ~ . , data = sstrain4, ntree = 500, mtry = 3)
+model2
+```
+
+```{r}
+pred <- predict(model2, newdata = sstest2)
+table(pred, sstest2$ssa)
+```
+
+
+
+
+

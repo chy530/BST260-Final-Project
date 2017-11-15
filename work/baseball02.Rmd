@@ -1,0 +1,115 @@
+---
+title: "baseball02"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball")
+awards <- read.csv("player_award.csv",stringsAsFactors=FALSE)
+batting <- read.csv("batting.csv",stringsAsFactors=FALSE)
+fielding <- read.csv("fielding.csv",stringsAsFactors=FALSE)
+pitching <- read.csv("pitching.csv",stringsAsFactors=FALSE)
+teams <- read.csv("team.csv",stringsAsFactors=FALSE)
+```
+
+```{r}
+yearcut = 1969
+awards <- awards %>% filter(year > yearcut)
+batting <- batting %>% filter(year > yearcut)
+fielding <- fielding %>% filter(year > yearcut)
+pitching <- pitching %>% filter(year > yearcut)
+wlyear <- teams %>% filter(year > yearcut)
+wlyear <- wlyear[, names(wlyear) %in% c("year","team_id","rank","w","l")]
+wlyear <- wlyear %>% mutate(wlratio = w/l)
+
+```
+
+Merge Golden Glove data, create training and testing data
+```{r}
+fielding <- merge(fielding,wlyear,by=c("year","team_id"),all=TRUE)
+
+gga <- awards %>% filter(award_id=="Gold Glove")
+gga <- gga %>% mutate(gga = 1)
+
+fieldgg <- merge(fielding,gga,by=c("player_id","year"),all=TRUE)
+fieldgg$gga[is.na(fieldgg$gga)] <- 0
+fieldgg[is.na(fieldgg)]<-0
+fieldgg$gga <- as.factor(fieldgg$gga)
+
+ggtrain <- fieldgg %>% filter(year < 2011)
+drops <- c("g_idp","award_id","tie","notes","sh","sf","league_id.x","league_id.y","team_id","pos","player_id")
+ggtrain <- ggtrain[ , !(names(ggtrain) %in% drops)]
+ggtrain <- ggtrain[complete.cases(ggtrain),]
+
+ggtest <- fieldgg %>% filter(year >= 2011)
+drops <- c("g_idp","award_id","tie","notes","sh","sf","league_id.x","league_id.y","team_id","pos","player_id")
+ggtest <- ggtest[ , !(names(ggtest) %in% drops)]
+#ggtest <- ggtest[complete.cases(ggtest),]
+
+```
+
+
+
+```{r}
+model <- glm(gga ~ g + gs + a + e + sb,family=binomial(link='logit'),data=ggtrain)
+summary(model)
+```
+
+```{r}
+anova(model, test="Chisq")
+```
+
+```{r}
+model <- glm(gga ~ g + gs + a + e + sb,family=binomial(link='logit'),data=ggtrain)
+model <- glm(gga ~ .,family=binomial(link='logit'),data=ggtrain)
+#fitted.results <- predict(model,newdata=subset(ggtest,select=c(2,3,4,5,6,7,8)),type='response')
+fitted.results <- predict(model,ggtest)
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != ggtest$gga)
+ggtest$ggpred = fitted.results
+print(paste('Accuracy',1-misClasificError))
+ggtest$FP = ifelse(ggtest$gga==0 & ggtest$ggpred==1,1,0)
+ggtest$FN = ifelse(ggtest$gga==1 & ggtest$ggpred==0,1,0)
+ggtest$TP = ifelse(ggtest$gga==1 & ggtest$ggpred==1,1,0)
+ggtest$TN = ifelse(ggtest$gga==0 & ggtest$ggpred==0,1,0)
+ggtest %>% summarize(sum(FP),sum(FN),sum(TP),sum(TN),sum(as.numeric(gga)))
+summary(model)
+```
+
+```{r}
+library(e1071)
+svm_model <- svm(gga ~ ., data=ggtrain)
+summary(svm_model)
+```
+
+```{r}
+x <- subset(ggtest,select=-gga)
+y <- ggtest$gga
+
+pred <- predict(svm_model,x)
+system.time(pred <- predict(svm_model,x))
+table(pred,y)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,97 @@
+---
+title: "data exploration 2"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+ppos <- read.csv("Appearances.csv",stringsAsFactors=FALSE)
+batting <- read.csv("Batting.csv",stringsAsFactors=FALSE)
+salaries <- read.csv("Salaries.csv",stringsAsFactors=FALSE)
+
+salaries <- salaries %>% filter(yearID > 1984)
+#salaries$playerID <- as.character(salaries$playerID)
+salaries <- salaries[order(salaries$playerID,salaries$yearID),]
+
+ppos <- ppos %>% filter(yearID > 1984)
+ppos <- ppos[order(ppos$playerID,ppos$yearID),]
+
+batting <- batting %>% filter(yearID > 1984)
+batting <- batting %>% select(playerID,yearID,H,AB)
+```
+
+Classify player type (pitcher, infielder, outfielder, "batter") based on appearances
+```{r}
+ppos <- ppos %>% mutate(G_if = G_c + G_1b + G_2b + G_3b + G_ss,
+                        G_hitr = G_dh + G_ph)
+
+ppos$ispitch <- ppos$G_p/ppos$G_all > 0.75
+ppos$isinf <- ppos$G_if/ppos$G_all > 0.75
+ppos$isoutf <- ppos$G_of/ppos$G_all > 0.75
+ppos$isbat <- ppos$G_hitr/ppos$G_all > 0.75
+
+batting <- batting %>% mutate(BA = H/AB)
+batting$BA[is.na(batting$BA)] <- 0
+ppos <- merge(ppos,batting,by=c('playerID','yearID'))
+
+ppos$isbat2 <- ppos$BA > 0.269
+ppos <- unique(ppos)
+```
+
+Fill in salaries
+```{r}
+ppos$salary <- -1
+
+for (i in 1:nrow(ppos)){
+  salfind = salaries$salary[which(salaries$playerID==ppos$playerID[[i]] & salaries$yearID==ppos$yearID[[i]])]
+  if (is_empty(salfind) == FALSE){
+    if (length(salfind) == 1) {
+      ppos$salary[[i]] = salfind  
+    }
+    else {
+      salfind = salaries$salary[which(salaries$playerID==ppos$playerID[[i]] & salaries$yearID==ppos$yearID[[i]] & salaries$teamID==ppos$teamID[[i]])]
+      if (is_empty(salfind) == FALSE){
+        ppos$salary[[i]] = salfind  
+      }
+    }
+  }
+}
+
+ppos <- ppos %>% filter(salary > 0)
+```
+
+```{r}
+ppitch <- ppos %>% filter(ispitch==TRUE)
+pinf <- ppos %>% filter(isinf==TRUE)
+poutf <- ppos %>% filter(isoutf==TRUE)
+pbat <- ppos %>% filter(isbat==TRUE)
+pbat2 <- ppos %>% filter(isbat2==TRUE)
+
+ppitchy <- ppitch %>% group_by(yearID) %>% summarize(median = mean(salary))
+pinfy <- pinf %>% group_by(yearID) %>% summarize(median = mean(salary))
+poutfy <- poutf %>% group_by(yearID) %>% summarize(median = mean(salary))
+pbaty <- pbat %>% group_by(yearID) %>% summarize(median = mean(salary))
+pbat2y <- pbat %>% group_by(yearID) %>% summarize(median = mean(salary))
+
+ggplot() + geom_line(aes(ppitchy$yearID,ppitchy$median,color="Pitchers")) +
+  geom_line(aes(pinfy$yearID,pinfy$median,color="Infielders")) +
+  geom_line(aes(poutfy$yearID,poutfy$median,color="Outfielders")) +
+  geom_line(aes(pbaty$yearID,pbaty$median,color="Batters(1)")) +
+  scale_y_continuous(trans='log10')
+```
+
+
+```{r}
+ggplot() + geom_smooth(aes(ppitch$yearID,ppitch$salary),color = "blue") +
+  geom_smooth(aes(pinf$yearID,pinf$salary),color = "green") +
+  geom_smooth(aes(poutf$yearID,poutf$salary),color = "cyan") +
+  geom_smooth(aes(pbat$yearID,pbat$salary),color = "red")
+  
+ggplot() + geom_smooth(aes(ppitch$yearID,log10(ppitch$salary)),color = "blue") +
+  geom_smooth(aes(pinf$yearID,log10(pinf$salary)),color = "green") +
+  geom_smooth(aes(poutf$yearID,log10(poutf$salary)),color = "cyan") +
+  geom_smooth(aes(pbat$yearID,log10(pbat$salary)),color = "red")
+```
+
+

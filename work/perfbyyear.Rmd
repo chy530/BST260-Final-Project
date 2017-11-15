@@ -1,0 +1,153 @@
+---
+title: "perfbyyear"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+wars <- read.csv("warplus.csv",stringsAsFactors=FALSE)
+names <- read.csv("Teams.csv",stringsAsFactors=FALSE)
+
+names <- names %>% select(yearID,teamID,teamIDBR,teamIDlahman45,teamIDretro,franchID,W,L)
+names <- names %>% filter(yearID>1984 & yearID<2017)
+```
+
+```{r}
+wars <- wars %>% filter(yearID>1984 & yearID<2017)
+wars$OPS_plus <- as.numeric(wars$OPS_plus)
+wars$WAR <- as.numeric(wars$WAR)
+wars$WAR_off <- as.numeric(wars$WAR_off)
+
+warteam <- wars %>% na.omit() %>% group_by(yearID,teamID) %>% 
+  summarize(medOPS = median(OPS_plus),
+            q90OPS = quantile(OPS_plus,0.9),
+            q10OPS = quantile(OPS_plus,0.1),
+            medWAR = median(WAR),
+            q90WAR = quantile(WAR,0.9),
+            q10WAR = quantile(WAR,0.1),
+            medWAR_off = median(WAR_off),
+            q90WAR_off = quantile(WAR_off,0.9),
+            q75WAR_off = quantile(WAR_off,0.75),
+            q10WAR_off = quantile(WAR_off,0.1),
+            WARtot = sum(WAR),
+            sdOPS = sd(OPS_plus))
+
+warteam %>% ggplot(aes(yearID,medOPS,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+
+warteam %>% ggplot(aes(yearID,medWAR,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+
+warteam %>% ggplot(aes(yearID,medWAR_off,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+```
+
+```{r}
+warteam$franchID = ""
+for (i in 1:nrow(warteam)){
+  nameyear <- names %>% filter(yearID==warteam$yearID[[i]])
+  nameab <- nameyear %>% filter(nameyear$teamIDBR==warteam$teamID[[i]])
+  warteam$franchID[[i]] = nameab$franchID[[1]]
+}
+```
+
+```{r}
+allwar <- warteam %>% filter(yearID<2000)
+allwar <- allwar %>% group_by(franchID) %>% summarize(wartot=sum(medWAR))
+allwar <- allwar %>% arrange(wartot)
+#allwar <- allwar %>% arrange(desc(wartot))
+allwar$rank <- c(1:nrow(allwar))
+allwar$franfct <- allwar$rank
+allwar$franfct <- factor(allwar$franfct,levels=allwar$rank,labels=allwar$franchID)
+
+warteam$franfct <- allwar$franfct[[1]]
+for (i in 1:nrow(warteam)){
+  warteam$franfct[[i]] <- allwar$franfct[which(allwar$franchID==warteam$franchID[[i]])]
+}
+```
+
+```{r}
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+warteam %>% ggplot(aes(yearID,franchID)) + geom_tile(aes(fill=medWAR_off)) + scale_x_continuous(breaks = seq(1985,2015,5)) + scale_fill_gradientn(colors = jet.colors(10))
+warteam %>% ggplot(aes(yearID,franchID)) + geom_tile(aes(fill=medOPS)) + scale_x_continuous(breaks = seq(1985,2015,5)) + scale_fill_gradientn(colors = jet.colors(10))
+```
+
+```{r}
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+
+warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=medWAR_off)) + 
+  scale_x_continuous(breaks = seq(1985,2015,5)) + 
+  #scale_y_discrete(labels = rev(allwar$franchID)) +
+  scale_fill_gradientn(colors = jet.colors(10),name="Median WAR\n   (offense)") +
+  labs(x="Year",y="Team/Franchise")
+
+warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=q75WAR_off)) + 
+  scale_x_continuous(breaks = seq(1985,2015,5)) + 
+  #scale_y_discrete(labels = rev(allwar$franchID)) +
+  scale_fill_gradientn(colors = jet.colors(10),name="75th pctile WAR\n   (offense)") +
+  labs(x="Year",y="Team/Franchise")
+```
+ttest by year of historically top teams vs the rest to see effect of revenue sharing
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+revs <- read.csv("MLBrevs.csv",stringsAsFactors=FALSE)
+names <- read.csv("Teamnames.csv",stringsAsFactors=FALSE)
+cpi <- read.csv("cpi.csv")
+
+revs$franchID = ""
+for (i in 1:nrow(revs)){
+  nameyear <- names %>% filter(yearID==revs$Year[[i]])
+  nameab <- nameyear %>% filter(grepl(revs$Team[[i]],nameyear$name)==TRUE)
+  revs$franchID[[i]] = nameab$franchID[[1]]
+}
+```
+
+```{r}
+revs <- revs[order(revs$franchID,revs$Year),]
+revs$Value = as.numeric(revs$Value)
+
+for (i in 2:nrow(revs)){
+  if (revs$Year[[i]]>1990){
+    revs$dv[[i]] = (revs$Value[[i]]-revs$Value[[i-1]])/revs$Value[[i-1]]
+    revs$dr[[i]] = (revs$Revenue[[i]]-revs$Revenue[[i-1]])/revs$Revenue[[i-1]]
+    revs$di[[i]] = (revs$O_Income[[i]]-revs$O_Income[[i-1]])/revs$O_Income[[i-1]]
+  }
+}
+
+cpi <- cpi %>% filter(year>1989)
+cpi1990 = cpi$cpi[[1]]
+cpi <- cpi %>% mutate(v1900 = cpi/cpi1990)
+
+for (i in 1:nrow(revs)){
+  revs$v1990[[i]] = cpi$v1900[which(cpi$year==revs$Year[[i]])]  
+}
+```
+
+```{r}
+revs$franfct <- allwar$franfct[[1]]
+for (i in 1:nrow(revs)){
+  revs$franfct[[i]] <- allwar$franfct[which(allwar$franchID==revs$franchID[[i]])]
+}
+
+```
+
+```{r}
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+revs2 = revs[order(revs$Value),]
+ggplot(revs2) + geom_tile(aes(Year,factor(franfct),fill=Value/v1990)) +
+  scale_fill_gradientn(colors = jet.colors(10))
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,109 @@
+---
+title: "baseball02b"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball")
+awards <- read.csv("player_award.csv",stringsAsFactors=FALSE)
+fielding <- read.csv("fielding.csv",stringsAsFactors=FALSE)
+teams <- read.csv("team.csv",stringsAsFactors=FALSE)
+```
+
+
+```{r}
+yearcut = 1969
+awards <- awards %>% filter(year > yearcut)
+fielding <- fielding %>% filter(year > yearcut)
+
+wlyear <- teams %>% filter(year > yearcut)
+wlyear <- wlyear[, names(wlyear) %in% c("year","team_id","rank","w","l")]
+wlyear <- wlyear %>% mutate(wlratio = w/l)
+
+```
+
+
+Merge Golden Glove data, create training and testing data
+```{r}
+fielding <- merge(fielding,wlyear,by=c("year","team_id"),all=TRUE)
+
+gga <- awards %>% filter(award_id=="Gold Glove")
+gga <- gga %>% mutate(gga = 1)
+
+fieldgg <- merge(fielding,gga,by=c("player_id","year"),all=TRUE)
+fieldgg$gga[is.na(fieldgg$gga)] <- 0
+fieldgg[is.na(fieldgg)]<-0
+fieldgg$gga <- as.factor(fieldgg$gga)
+
+ggtrain <- fieldgg %>% filter(year < 2011)
+drops <- c("g_idp","gs","award_id","tie","notes","sh","sf","wp","zr","league_id.x","league_id.y","team_id","pos","player_id")
+ggtrain <- ggtrain[ , !(names(ggtrain) %in% drops)]
+ggtrain <- ggtrain[complete.cases(ggtrain),]
+
+ggtest <- fieldgg %>% filter(year >= 2011)
+drops <- c("g_idp","gs","award_id","tie","notes","sh","sf","wp","zr","league_id.x","league_id.y","team_id","pos","player_id")
+ggtest <- ggtest[ , !(names(ggtest) %in% drops)]
+#ggtest <- ggtest[complete.cases(ggtest),]
+
+```
+
+
+
+```{r}
+ggtrain2 = ggtrain
+ggtest2 = ggtest
+
+ranks <- function(years,dframe){
+  sorted = dframe %>% filter(year == years[1])
+  for (i in 3:15){
+    sorted[i] = sorted[i]/max(sorted[i])
+  }
+  for (i in 2:length(years)){
+    #print(years[i])
+    sortyear = dframe %>% filter(year == years[i])
+    for (i in 3:15){
+      sortyear[i] = sortyear[i]/max(sortyear[i])
+      #sortyear[i] = log(1-sortyear[i]/max(sortyear[i])+0.0001)
+    }
+    sorted = rbind(sorted,sortyear)
+  }
+  sorted
+}
+
+yearrange = c((yearcut+1):2010)
+ggtrain2 = ranks(yearrange,ggtrain2)
+#ggtrain <- ggtrain[order(ggtrain$year,ggtrain$gs),]
+#sstrain2 <- sstrain2[order(sstrain2$year,sstrain2$g),]
+ggtrain2 <- ggtrain2[order(ggtrain2$gga),]
+
+nullct <- tabulate(ggtrain2$gga)[1] #nulls
+remind = sample(nullct,nullct-3000)
+ggtrain3 <- ggtrain2[-remind,]
+
+yearrange2 = c(2011:2015)
+ggtest2 = ranks(yearrange2,ggtest2)
+
+```
+
+
+```{r}
+library(randomForest)
+model <- randomForest(gga ~ . , data = ggtrain3, ntree = 500, mtry = 5)
+model
+```
+
+```{r}
+pred <- predict(model, newdata = ggtrain3)
+table(pred, ggtrain3$gga)
+```
+
+```{r}
+pred <- predict(model, newdata = ggtest2)
+table(pred, ggtest2$gga)
+```
+
+```{r}
+print(1)
+```
+

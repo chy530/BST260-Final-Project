@@ -1,0 +1,208 @@
+---
+title: "baseball01a"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017/war_archive-2017-11-08")
+wars <- read.csv("war_daily_bat.csv",stringsAsFactors=FALSE)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+salaries <- read.csv("Salaries.csv",stringsAsFactors=FALSE)
+#bats <- read.csv("batting.csv")
+
+salaries <- salaries %>% filter(yearID > 1969 & yearID < 2017)
+wars <- wars %>% filter(year_ID > 1969)
+wars <- wars %>% rename(playerID=player_ID,yearID=year_ID,teamID=team_ID)
+
+salaries <- salaries[order(salaries$playerID,salaries$yearID),]
+wars <- wars[order(wars$playerID,wars$yearID),]
+```
+
+Determine salary bumps/reductions in Salary dataset
+```{r,eval=FALSE}
+
+# players <- unique(salaries$playerID)
+# salaries$bump = 0
+# salaries$cut = 0
+# salaries$dsal = 0
+# player1 <- salaries$playerID[[1]]
+# for (i in 2:nrow(salaries)) {
+#   if (salaries$playerID[[i]] == player1){
+#     if (salaries$salary[[i]] > salaries$salary[[i-1]]){
+#       salaries$bump[[i]] = 1
+#     }
+#     else if (salaries$salary[[i]] < salaries$salary[[i-1]]){
+#       salaries$cut[[i]] = 1
+#     }
+#     salaries$dsal[[i]] = salaries$salary[[i]] - salaries$salary[[i-1]]
+#   }
+#   else{
+#     player1 <- salaries$playerID[[i]]
+#   }
+# }
+
+```
+
+Determine salary bumps/reductions in WAR dataset
+```{r}
+players <- unique(wars$playerID)
+wars$salary[which(wars$salary=="NULL")] <- "-999"
+wars$salary <- as.numeric(wars$salary)
+
+wars$bump = 0
+wars$cut = 0
+wars$dsal = 0
+
+player1 <- wars$playerID[[1]]
+for (i in 2:nrow(wars)) {
+  if (wars$playerID[[i]] == player1){
+    wars$prevWAA[[i]] = wars$WAA[[i-1]]
+    wars$prevWAA_off[[i]] = wars$WAA_off[[i-1]]
+    wars$prevWAA_def[[i]] = wars$WAA_def[[i-1]]
+    wars$prevWAR[[i]] = wars$WAR[[i-1]]
+    wars$prevWAR_off[[i]] = wars$WAR_off[[i-1]]
+    wars$prevWAR_def[[i]] = wars$WAR_def[[i-1]]
+    if (wars$salary[[i]]==-999){
+      wars$salary[[i]]=wars$salary[[i-1]]
+    }
+    #bump if salary increased
+    if (wars$salary[[i]] > wars$salary[[i-1]]){
+      wars$bump[[i]] = 1
+    }
+    #cut if salary decreased
+    else if (wars$salary[[i]] < wars$salary[[i-1]]){
+      wars$cut[[i]] = 1
+    }
+    wars$dsal[[i]] = wars$salary[[i]] - wars$salary[[i-1]]
+    wars$pdsal[[i]] = (wars$salary[[i]] - wars$salary[[i-1]])/wars$salary[[i-1]]
+    
+    wars$dWAA_off[[i]] = as.numeric(wars$WAA_off[[i]]) - as.numeric(wars$WAA_off[[i-1]])
+    wars$pdWAA_off[[i]] = wars$dWAA_off[[i-1]]
+  }
+  else{
+    player1 <- wars$playerID[[i]]
+    if (wars$salary[[i]]==-999){
+      wars$salary[[i]]=0
+    }
+  }
+}
+
+```
+
+```{r}
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+write.csv(wars,"warplus.csv")
+```
+
+
+```{r}
+warstats <- wars %>% filter(pitcher=="N")
+warstats <- warstats[c("playerID","yearID","teamID","WAA","WAA_off","WAA_def","WAR","WAR_off","WAR_def","prevWAA","prevWAA_off","prevWAA_def","prevWAR","prevWAR_off","prevWAR_def","OPS_plus","salary","bump","cut","dsal","pdsal","dWAA_off","pdWAA_off")]
+warstats <- warstats %>% filter(yearID > 1985)
+```
+
+
+```{r}
+ggplot(warstats) + geom_histogram(aes(pdsal)) + scale_x_continuous(trans="log10")
+```
+
+
+```{r}
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+warstats <- warstats %>% filter(dsal!=0)
+warstats %>% ggplot(aes(as.numeric(WAR),as.numeric(dsal))) + geom_point() + geom_smooth()
+warstats %>% ggplot(aes(as.numeric(WAR),as.numeric(dsal))) + geom_point() + geom_smooth() + scale_y_continuous(trans="log10")
+warstats %>% ggplot(aes(as.numeric(WAR),as.numeric(dsal))) + geom_hex(bins=20) + scale_y_continuous(trans="log10") +
+  scale_fill_gradientn(colors = jet.colors(10))
+warstats %>% ggplot(aes(as.numeric(WAR),-as.numeric(dsal))) + geom_point() + geom_smooth() + scale_y_continuous(trans="log10")
+
+warstats %>% ggplot(aes(as.numeric(prevWAR),as.numeric(dsal))) + geom_point() + geom_smooth() 
+warstats %>% ggplot(aes(as.numeric(prevWAR),as.numeric(dsal))) + geom_point() + geom_smooth() + scale_y_continuous(trans="log10")
+warstats %>% ggplot(aes(as.numeric(prevWAR),-as.numeric(dsal))) + geom_point() + geom_smooth() + scale_y_continuous(trans="log10")
+```
+
+```{r}
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$WAR))
+summary(warmod)
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$prevWAR))
+summary(warmod)
+
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$WAR_off))
+summary(warmod)
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$prevWAR_off))
+summary(warmod)
+
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$WAR_def))
+summary(warmod)
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$prevWAR_def))
+summary(warmod)
+
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$WAA))
+summary(warmod)
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$prevWAA))
+summary(warmod)
+
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$WAA_off))
+summary(warmod)
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$prevWAA_off))
+summary(warmod)
+
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$WAA_def))
+summary(warmod)
+warmod <- lm(warstats$dsal ~ as.numeric(warstats$prevWAA_def))
+summary(warmod)
+
+```
+
+```{r}
+warzeros <- warstats %>% filter(dsal==0)
+warzeros %>% ggplot() + geom_histogram(aes(as.numeric(prevWAA_off)),binwidth=0.05)
+
+warcut <- warstats %>% filter(dsal<0)
+warcut %>% ggplot() + geom_histogram(aes(as.numeric(prevWAA_off)),binwidth=0.05)
+
+warbump <- warstats %>% filter(dsal>0)
+warbump %>% ggplot() + geom_histogram(aes(as.numeric(prevWAA_off)),binwidth=0.05)
+
+```
+```{r}
+quantile(as.numeric(warzeros$prevWAA_off),na.rm=TRUE)
+quantile(as.numeric(warcut$prevWAA_off),na.rm=TRUE)
+quantile(as.numeric(warbump$prevWAA_off),na.rm=TRUE)
+
+as.numeric(warzeros$prevWAA_off)[>0]
+```
+
+
+```{r}
+warstats <- warstats %>% filter(dsal!=0)
+warstats <- warstats %>% filter(abs(dsal)>1)
+
+warstats %>% ggplot(aes(as.numeric(prevWAA_off),as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth()
+warstats %>% ggplot(aes(as.numeric(prevWAA_off),as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth() + scale_y_continuous(trans="log10")
+warstats %>% ggplot(aes(as.numeric(prevWAA_off),-as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth() + scale_y_continuous(trans="log10")
+```
+
+```{r}
+warstats <- warstats %>% filter(dsal!=0)
+warstats <- warstats %>% filter(abs(dsal)>1)
+
+warstats %>% ggplot(aes(as.numeric(dWAA_off),as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth()
+warstats %>% ggplot(aes(as.numeric(dWAA_off),as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth() + scale_y_continuous(trans="log10")
+warstats %>% ggplot(aes(as.numeric(dWAA_off),-as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth() + scale_y_continuous(trans="log10")
+```
+
+```{r}
+#warstats <- warstats %>% filter(dsal!=0)
+#warstats <- warstats %>% filter(abs(dsal)>1)
+
+warstats %>% ggplot(aes(as.numeric(pdWAA_off),as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth()
+warstats %>% ggplot(aes(as.numeric(pdWAA_off),as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth() + scale_y_continuous(trans="log10")
+warstats %>% ggplot(aes(as.numeric(pdWAA_off),-as.numeric(dsal))) + geom_point(size=0.1) + geom_smooth() + scale_y_continuous(trans="log10")
+```
+
+
+
+
+

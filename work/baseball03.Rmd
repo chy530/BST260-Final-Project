@@ -1,0 +1,21 @@
+---
+title: "baseball03"
+output: html_document
+---
+
+Cy Young
+```{r}
+mvps <- awards %>% filter(award_id=="Most Valuable Player")
+mvps <- mvps %>% mutate(mvp = 1)
+
+cyya <- awards %>% filter(award_id=="Cy Young Award")
+cyya <- cyya %>% mutate(cyya = 1)
+
+pitchcy <- merge(pitching,cyya,by=c("player_id","year"),all=TRUE)
+pitchcy$cyya[is.na(pitchcy$cyya)==TRUE] <- 0
+
+cytrain <- pitchcy %>% filter(year < 2011)
+drops <- c("g_idp","award_id","tie","notes","sh","sf","league_id.y")
+cytrain <- cytrain[ , !(names(cytrain) %in% drops)]
+cytrain <- cytrain[complete.cases(cytrain),]
+```

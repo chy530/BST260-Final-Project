@@ -1,0 +1,128 @@
+---
+title: "teamnames"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+revs <- read.csv("MLBrevs.csv",stringsAsFactors=FALSE)
+names <- read.csv("Teamnames.csv",stringsAsFactors=FALSE)
+cpi <- read.csv("cpi.csv")
+```
+
+```{r}
+revs$franchID = ""
+for (i in 1:nrow(revs)){
+  nameyear <- names %>% filter(yearID==revs$Year[[i]])
+  nameab <- nameyear %>% filter(grepl(revs$Team[[i]],nameyear$name)==TRUE)
+  revs$franchID[[i]] = nameab$franchID[[1]]
+}
+```
+
+```{r,warning=FALSE}
+ggplot(revs) + geom_smooth(aes(Year,Revenue)) + geom_point(aes(Year,Revenue))
+ggplot(revs) + geom_smooth(aes(Year,log10(Revenue))) + geom_point(aes(Year,log10(Revenue)))
+```
+
+```{r}
+revs <- revs[order(revs$franchID,revs$Year),]
+revs$Value = as.numeric(revs$Value)
+
+for (i in 2:nrow(revs)){
+  if (revs$Year[[i]]>1990){
+    revs$dv[[i]] = (revs$Value[[i]]-revs$Value[[i-1]])/revs$Value[[i-1]]
+    revs$dr[[i]] = (revs$Revenue[[i]]-revs$Revenue[[i-1]])/revs$Revenue[[i-1]]
+    revs$di[[i]] = (revs$O_Income[[i]]-revs$O_Income[[i-1]])/revs$O_Income[[i-1]]
+  }
+}
+```
+
+$$\frac{P_{present}}{P_{past}}=\frac{CPI_{present}}{CPI_{past}}$$
+```{r}
+cpi <- cpi %>% filter(year>1989)
+cpi1990 = cpi$cpi[[1]]
+cpi <- cpi %>% mutate(v1900 = cpi/cpi1990)
+
+for (i in 1:nrow(revs)){
+  revs$v1990[[i]] = cpi$v1900[which(cpi$year==revs$Year[[i]])]  
+}
+
+```
+
+```{r}
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+revs2 = revs[order(revs$Value),]
+ggplot(revs2) + geom_tile(aes(Year,franchID,fill=Value/v1990)) +
+  scale_fill_gradientn(colors = jet.colors(10))
+```
+
+```{r}
+topval = c("BOS","CHC","LAD","NYM","NYY","SFG")
+revs2low = revs2 %>% filter(!(revs2$franchID %in% topval))
+revs2low = revs2a %>% group_by(Year) %>% summarize(meanval = mean(Value),meanrev = mean(Revenue),v1990 = mean(v1990))
+revs2low$franchID = "Everyone Else (avg)"
+
+revs2high = revs2 %>% filter(revs2$franchID %in% topval)
+
+ggplot() + geom_line(aes(Year,Value/v1990,color=franchID),data=revs2high) + geom_line(aes(Year,meanval/v1990),data=revs2low)
+
+ggplot() + geom_line(aes(Year,Revenue/v1990,color=franchID),data=revs2high) + geom_line(aes(Year,meanrev/v1990),data=revs2low)
+
+```
+
+
+```{r}
+ggplot(revs) + geom_boxplot(aes(Year,dv,fill=factor(Year))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=1),label="STRIKE",angle=90,hjust = 0,color="white") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +
+  theme(legend.position="none")
+
+ggplot(revs) + geom_boxplot(aes(Year,dr,fill=factor(Year))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=.65),label="STRIKE",angle=90,hjust = 0,color="white") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +
+  theme(legend.position="none")
+
+ggplot(revs) + geom_boxplot(aes(Year,Value/v1990,fill=factor(Year))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=500),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="Valuation in 1990 dollars, log millions") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +
+  scale_y_continuous(breaks = c(125,250,500,1000,2000),trans="log10") +
+  theme(legend.position="none")
+
+ggplot(revs) + geom_boxplot(aes(Year,Revenue/v1990,fill=factor(Year))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=200),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="Revenue in 1990 dollars, millions") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +
+  scale_y_continuous(breaks = seq(0,300,50)) +
+  theme(legend.position="none")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

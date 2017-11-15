@@ -1,0 +1,237 @@
+---
+title: "Data Exploration"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+salaries <- read.csv("Salaries.csv")
+batting <- read.csv("Batting.csv")
+
+salaries <- salaries %>% filter(yearID > 1984)
+salaries$playerID <- as.character(salaries$playerID)
+salaries <- salaries[order(salaries$playerID,salaries$yearID),]
+```
+
+Determine salary bumps/reductions
+```{r}
+players <- unique(salaries$playerID)
+salaries$bump = 0
+salaries$cut = 0
+salaries$dsal = 0
+player1 <- salaries$playerID[[1]]
+for (i in 2:nrow(salaries)) {
+  if (salaries$playerID[[i]] == player1){
+    if (salaries$salary[[i]] > salaries$salary[[i-1]]){
+      salaries$bump[[i]] = 1
+    }
+    else if (salaries$salary[[i]] < salaries$salary[[i-1]]){
+      salaries$cut[[i]] = 1
+    }
+    salaries$dsal[[i]] = salaries$salary[[i]] - salaries$salary[[i-1]]
+  }
+  else{
+    player1 <- salaries$playerID[[i]]
+  }
+}
+sal2 = salaries
+```
+
+```{r}
+heatmap <- function(df,nbins){
+  salrange = c(min(df$salary,na.rm=TRUE),max(df$salary,na.rm=TRUE))
+  ysalrange = df %>% group_by(yearID) %>% summarize(min = min(salary,na.rm=TRUE),max = max(salary,na.rm=TRUE))
+  mybins = c(0, rev(round(salrange[2]/c(1:nbins))), salrange[2])
+  df$salbin = 0
+  df$salbiny = 0
+  for (i in 1:nrow(df)){
+    if (is.na(df$salary[[i]]) == FALSE){
+      bin = which(min(abs(df$salary[[i]]-mybins))==abs(df$salary[[i]]-mybins))  
+      df$salbin[[i]] = bin[1] #in case which() returns more than one index
+      
+      yrmax = ysalrange$max[which(ysalrange$yearID==df$yearID[[i]])]
+      mybins2 = c(0, rev(round(yrmax/c(1:nbins))), yrmax)
+      bin2 = which(min(abs(df$salary[[i]]-mybins2))==abs(df$salary[[i]]-mybins2))  
+      df$salbiny[[i]] = bin2[1] #in case which() returns more than one index
+      #print(i)
+    }
+  }
+  output = df
+}
+
+asdf = heatmap(sal2,19)
+```
+
+```{r}
+asdf2 = asdf
+asdf2$yearf = as.factor(asdf2$yearID)
+
+asdf3 = asdf2 %>% group_by(yearf,salbin) %>% summarize(count=sum(salbin)) %>% mutate(pct=count/sum(count))
+asdf4 = asdf2 %>% group_by(yearf,salbiny) %>% summarize(count=sum(salbiny)) %>% mutate(pct=count/sum(count))
+```
+
+
+```{r}
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+asdf3 %>% ggplot(aes(salbin*165,yearf)) + geom_tile(aes(fill=count)) + scale_fill_gradientn(colors = jet.colors(10)) + labs(title="Salary distribution by Year",x="Salary ($, thousands)",y="Year")
+```
+
+```{r}
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+asdf4 %>% ggplot(aes(salbiny,yearf)) + geom_tile(aes(fill=count)) + scale_fill_gradientn(colors = jet.colors(10))
+asdf4 %>% ggplot(aes(salbiny*5,yearf)) + geom_tile(aes(fill=pct)) + scale_fill_gradientn(colors = jet.colors(10)) + labs(title="Salary distribution by Year",x="Percentile",y="Year")
+```
+
+```{r,warning=FALSE}
+BBsalaries = asdf %>% group_by(yearID) %>% summarize(msalary=median(salary),avg=mean(salary))
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+USsalaries <- read.csv("USmedsalary.csv")
+USsalaries <- USsalaries %>% filter(yearID > 1984)
+USsalaries <- USsalaries[order(USsalaries$yearID),]
+
+BBsalaries$BBpct <- BBsalaries$msalary/BBsalaries$msalary[[1]]
+BBsalaries$BBavgpct <- BBsalaries$avg/BBsalaries$avg[[1]]
+USsalaries$USpct <- USsalaries$msalary/USsalaries$msalary[[1]]
+USsalaries$USavgpct <- USsalaries$avg/USsalaries$avg[[1]]
+
+allsal <- merge(BBsalaries,USsalaries,by="yearID")
+
+override.color <- c("red","red","blue","blue")
+override.linetype <- c(1,2,1,2)
+
+ggplot(allsal,aes(x=yearID)) + 
+  geom_line(aes(y=USpct,color="US median",linetype="US median")) +
+  geom_line(aes(y=USavgpct,color="US average",linetype="US average")) +
+  geom_line(aes(y=BBpct,color="MLB median",linetype="MLB median")) +
+  geom_line(aes(y=BBavgpct,color="MLB average",linetype="MLB average")) +
+  scale_x_continuous(breaks = seq(1985,2015,5)) +
+  scale_y_continuous(breaks = seq(0,10,1)) +
+  labs(x="Year",y="Salary level vs 1985 (multiplier)",title="MLB salary vs US household income") +
+  scale_color_manual(values = c("red","red","blue","blue")) +
+  scale_linetype_manual(values = c(1,2,1,2)) +
+  guides(color = guide_legend(override.aes = list(color = override.color, linetype = override.linetype),title="")) +
+  guides(linetype=FALSE)
+
+#have detailed explanation of where datasets came from and what was done to wrangle them
+```
+Since 1985, US median household income has increased by around 25% every 5 years.
+Baseball salary fluctuated through the late 1980s and 90s, but increased dramatically after 2000. Was this related to a performance boost? Average salary has been increasing at a much faster pace. This suggests that the salary for top players is increasing faster than that of "average" players.
+
+Calculate On-base Plus Slugging (OPS)
+```{r}
+batting <- batting %>% filter(yearID > 1984)
+batting[is.na(batting)]<-0
+batting$playerID <- as.character(batting$playerID)
+batting <- batting[order(batting$playerID,batting$yearID),]
+batting <- batting %>% mutate(X1B=H-(X2B+X3B+HR), #singles
+                              TB=X1B*1+X2B*2+X3B*3+HR*4, #total bases
+                              SLG=TB/AB, #slugging
+                              OBP=(H+BB+HBP)/(AB+BB+SF+HBP), #on base percentage
+                              OPS=SLG+OBP)
+```
+
+```{r}
+batting %>% ggplot(aes(yearID,OPS,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+```
+We can see that OPS has not changed significantly since 1985.
+
+```{r}
+batteam <- batting %>% na.omit() %>% group_by(yearID,teamID) %>% summarize(medOPS = median(OPS),q90OPS = quantile(OPS,0.9),q10OPS = quantile(OPS,0.1),meanOPS = mean(OPS), sdOPS = sd(OPS))
+
+batteam %>% ggplot(aes(yearID,q90OPS,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5)) 
+
+batteam %>% ggplot(aes(yearID,q10OPS,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+
+batteam %>% ggplot(aes(yearID,meanOPS,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+
+batteam %>% ggplot(aes(yearID,sdOPS,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+```
+
+```{r}
+mopsyear <- lm(meanOPS ~ yearID, data=batteam)
+sdopsyear <- lm(sdOPS ~ yearID, data=batteam)
+summary(mopsyear)
+summary(sdopsyear)
+```
+
+
+
+```{r}
+salteam <- sal2 %>% select(playerID,yearID,teamID,salary) %>% na.omit() %>% group_by(yearID,teamID) %>% summarize(totsal = sum(salary),sdsal = sd(salary),maxsal = max(salary)/median(salary), p90sal = quantile(salary,.9)/median(salary), p99sal = quantile(salary,.99)/median(salary), p10sal = quantile(salary,.1)/median(salary)) %>% mutate(pctsal = totsal/mean(totsal),pctsd = sdsal/median(sdsal))
+
+salteam %>% ggplot(aes(yearID,pctsal,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+
+#salteam %>% ggplot(aes(yearID,pctsd,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+
+#salteam %>% ggplot(aes(yearID,maxsal,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+
+salteam %>% ggplot(aes(yearID,p90sal,fill=factor(yearID))) + 
+  geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + 
+  scale_x_continuous(breaks = seq(1985,2015,5)) +
+  scale_y_continuous(breaks = seq(0,30,5), trans="log10") +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=1),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="90th percentile ÷ median salary")
+
+salteam %>% ggplot(aes(yearID,p99sal,fill=factor(yearID))) + 
+  geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + 
+  scale_x_continuous(breaks = seq(1985,2015,5)) +
+  scale_y_continuous(breaks = seq(0,100,10), trans="log10") +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=2),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="99th percentile ÷ median salary")
+  
+
+#salteam %>% ggplot(aes(yearID,p10sal,fill=factor(yearID))) + geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + scale_x_continuous(breaks = seq(1985,2015,5))
+```
+[baseball strike 94-95 season]
+
+```{r,warning=FALSE}
+salmax95 <- sal2 %>% filter(yearID==1995) %>% select(playerID,teamID,salary) %>% na.omit() %>% group_by(teamID) %>% filter(salary == max(salary))
+salmax95 <- unique(salmax95)
+
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+players <- read.csv("Master.csv",stringsAsFactors=FALSE)
+playernames <- players %>% filter(playerID %in% salmax95$playerID) %>% select(playerID,nameFirst,nameLast)
+salmax95 <- merge(salmax95,playernames,by="playerID")
+salmax95$fullname <- with(salmax95, paste0(nameFirst," ",nameLast))
+salmax95 <- salmax95[order(salmax95$salary),]
+
+library(ggrepel)
+salmax95 %>% ggplot(aes(x=1995,y=salary/1000000,label=nameFirst)) +
+  geom_text_repel(aes(label=fullname),segment.color = 'grey75') + 
+  geom_point(color='seagreen3') +
+  scale_x_continuous(breaks=c()) +
+  labs(title="Highest-paid players per team, 1995",x="",y = "Salary ($, millions)")
+```
+Max salaries in a team went to future Hall of Famers Ken Griffey Jr., Barry Larkin, Kirby Puckett, and Cal Ripken, Jr., as well as other popular players of the time, including Barry Bonds, Jose Canseco, Mark McGwire, and Daryl Strawberry. So, it seems that salaries went to popular players, who were presumably also the players who played well.
+
+Calculate changes in OPS year-on-year
+```{r}
+batting$dOPS = 0
+batting$prevOPS = 0
+player1 <- batting$playerID[[1]]
+for (i in 2:nrow(batting)) {
+  if (batting$playerID[[i]] == player1){
+    batting$dOPS[[i]] <- batting$OPS[[i]] - batting$OPS[[i-1]]
+    batting$prevOPS[[i]] <- batting$OPS[[i-1]]
+  }
+  else{
+    player1 <- batting$playerID[[i]]
+    i = i+1
+  }
+}
+```
+
+```{r}
+opsonly <- batting[c("playerID","yearID","OPS","dOPS","prevOPS")]
+sal2 <- merge(opsonly,salaries,by=c("playerID","yearID"),all=TRUE)
+sal2 <- sal2[order(sal2$playerID,sal2$yearID),]
+sal2filt = sal2 %>% filter(bump > -1)
+```
+
+
+
+
+

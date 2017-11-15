@@ -1,0 +1,122 @@
+---
+title: "RF-rbloggers"
+output: html_document
+---
+
+```{r}
+require(randomForest)
+require(MASS)#Package which contains the Boston housing dataset
+attach(Boston)
+set.seed(101)
+```
+
+```{r}
+#training Sample with 300 observations
+train=sample(1:nrow(Boston),300)
+?Boston  #to search on the dataset
+```
+
+```{r}
+Boston.rf=randomForest(medv ~ . , data = Boston , subset = train)
+Boston.rf
+## 
+## Call:
+##  randomForest(formula = medv ~ ., data = Boston, subset = train) 
+##                Type of random forest: regression
+##                      Number of trees: 500
+## No. of variables tried at each split: 4
+## 
+##           Mean of squared residuals: 12.62686
+##                     % Var explained: 84.74
+```
+
+```{r}
+plot(Boston.rf)
+```
+
+
+
+https://www.r-bloggers.com/predicting-wine-quality-using-random-forests/
+
+```{r}
+url <- 'https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv'
+wine <- read.table(url,sep=";",header=TRUE)
+head(wine)
+```
+
+```{r}
+barplot(table(wine$quality))
+```
+
+```{r}
+wine$taste <- ifelse(wine$quality < 6, 'bad', 'good')
+wine$taste[wine$quality == 6] <- 'normal'
+wine$taste <- as.factor(wine$taste)
+```
+
+```{r}
+table(wine$taste)
+```
+
+```{r}
+set.seed(123)
+samp <- sample(nrow(wine), 0.6 * nrow(wine))
+train <- wine[samp, ]
+test <- wine[-samp, ]
+```
+
+
+This will place 60% of the observations in the original dataset into train and the remaining 40% of the observations into test.
+
+Building the model
+Now, we are ready to build our model. We will need the randomForest library for this.
+
+```{r}
+library(randomForest)
+model <- randomForest(taste ~ . - quality, data = train, ntree = 10, mtry = 3)
+```
+
+We can use ntree and mtry to specify the total number of trees to build (default = 500), and the number of predictors to randomly sample at each split respectively. Let’s take a look at the model.
+
+```{r}
+model
+```
+
+We can see that 500 trees were built, and the model randomly sampled 3 predictors at each split. It also shows a matrix containing prediction vs actual, as well as classification error for each class. Let’s test the model on the test data set.
+
+```{r}
+pred <- predict(model, newdata = test)
+table(pred, test$taste)
+```
+
+```{r}
+480/(480+15+172)
+print(model)
+```
+
+
+
+Ideas:
+**Use 2000-2010 as training data for 2011-2015
+
+Effect of player performance on salary change -> predict salary
+Effect of salary change on player performance -> predect performance
+
+Cluster to determine position based on field appearances
+
+WS winners based on postseason performance
+WS winners based on regular season performance
+Postseason performance based on regular season performance
+Next year's WS winners based on last year's performance
+Next year's WS winners based on year-to-year improvement
+
+
+
+
+
+
+
+
+
+
+

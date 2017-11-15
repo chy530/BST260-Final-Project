@@ -1,0 +1,42 @@
+---
+title: "war_read"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017/war_archive-2017-11-08")
+wars <- read.csv("war_daily_bat.csv",stringsAsFactors=FALSE)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+bats <- read.csv("Batting.csv",stringsAsFactors=FALSE)
+pits <- read.csv("Pitching.csv",stringsAsFactors=FALSE)
+```
+
+```{r}
+wars <- wars %>% filter(year_ID>1969 & year_ID<2017)
+bats <- bats %>% filter(yearID>1969)
+pits <- pits %>% filter(yearID>1969)
+
+wars <- wars[order(wars$player_ID,wars$year_ID),]
+bats <- bats[order(bats$playerID,bats$yearID),]
+pits <- pits[order(pits$playerID,pits$yearID),]
+
+uwars = unique(wars$player_ID)
+ubats = unique(bats$playerID)
+upits = unique(pits$playerID)
+```
+
+```{r}
+unames = data.frame(uwars,stringsAsFactors=FALSE)
+ubats = data.frame(ubats,stringsAsFactors=FALSE)
+upits = data.frame(upits,stringsAsFactors=FALSE)
+
+unames$batn = ""
+for (i in 1:nrow(unames)){
+  repnam = ubats$ubats[which(ubats$ubats==unames$uwars[[i]])]
+  if (length(repnam)>0){
+    unames$batn[[i]] = repnam  
+  }
+}
+```
+
