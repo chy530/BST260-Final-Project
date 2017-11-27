@@ -1,0 +1,26 @@
+---
+title: "Final Project"
+output: html_document
+---
+
+First will look at salaries over time.
+```{r,echo=FALSE}
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+ppos <- read.csv("Appearances.csv",stringsAsFactors=FALSE)
+batting <- read.csv("Batting.csv",stringsAsFactors=FALSE)
+salaries <- read.csv("Salaries.csv",stringsAsFactors=FALSE)
+```
+Note that salary information is only available from 1985 forward.
+```{r}
+min(salaries$yearID)
+```
+
+We can observe salary trends over time using player salary data from the Lahman dataset, and US household salary data from the US Census Bureau.
+```{r}
+
+```
+Using the respective 1985 salaries as a baseline, we see that median player salary growth has not outpaced the salary growth of US households. W
+
+Since 1985, US median household income has increased by around 25% every 5 years.
+Baseball salary fluctuated through the late 1980s and 90s, but increased dramatically after 2000. Was this related to a performance boost? Average salary has been increasing at a much faster pace. This suggests that the salary for top players is increasing faster than that of "average" players.
