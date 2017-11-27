@@ -17,9 +17,39 @@ min(salaries$yearID)
 ```
 
 We can observe salary trends over time using player salary data from the Lahman dataset, and US household salary data from the US Census Bureau.
-```{r}
+```{r,warning=FALSE}
+BBsalaries = asdf %>% group_by(yearID) %>% summarize(msalary=median(salary),avg=mean(salary))
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+USsalaries <- read.csv("USmedsalary.csv")
+USsalaries <- USsalaries %>% filter(yearID > 1984)
+USsalaries <- USsalaries[order(USsalaries$yearID),]
 
+BBsalaries$BBpct <- BBsalaries$msalary/BBsalaries$msalary[[1]]
+BBsalaries$BBavgpct <- BBsalaries$avg/BBsalaries$avg[[1]]
+USsalaries$USpct <- USsalaries$msalary/USsalaries$msalary[[1]]
+USsalaries$USavgpct <- USsalaries$avg/USsalaries$avg[[1]]
+
+allsal <- merge(BBsalaries,USsalaries,by="yearID")
+
+override.color <- c("red","red","blue","blue")
+override.linetype <- c(1,2,1,2)
+
+ggplot(allsal,aes(x=yearID)) + 
+  geom_line(aes(y=USpct,color="US median",linetype="US median")) +
+  geom_line(aes(y=USavgpct,color="US average",linetype="US average")) +
+  geom_line(aes(y=BBpct,color="MLB median",linetype="MLB median")) +
+  geom_line(aes(y=BBavgpct,color="MLB average",linetype="MLB average")) +
+  scale_x_continuous(breaks = seq(1985,2015,5)) +
+  scale_y_continuous(breaks = seq(0,10,1)) +
+  labs(x="Year",y="Salary level vs 1985 (multiplier)",title="MLB salary vs US household income") +
+  scale_color_manual(values = c("red","red","blue","blue")) +
+  scale_linetype_manual(values = c(1,2,1,2)) +
+  guides(color = guide_legend(override.aes = list(color = override.color, linetype = override.linetype),title="")) +
+  guides(linetype=FALSE)
+
+#have detailed explanation of where datasets came from and what was done to wrangle them
 ```
+
 Using the respective 1985 salaries as a baseline, we see that median player salary growth has not outpaced the salary growth of US households. W
 
 Since 1985, US median household income has increased by around 25% every 5 years.
