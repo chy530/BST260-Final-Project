@@ -4,11 +4,9 @@ output: html_document
 ---
 
 First will look at salaries over time.
-```{r,echo=FALSE}
+```{r,warning=FALSE,echo=FALSE}
 library(tidyverse)
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
-ppos <- read.csv("Appearances.csv",stringsAsFactors=FALSE)
-batting <- read.csv("Batting.csv",stringsAsFactors=FALSE)
 salaries <- read.csv("Salaries.csv",stringsAsFactors=FALSE)
 ```
 Note that salary information is only available from 1985 forward.
@@ -17,8 +15,9 @@ min(salaries$yearID)
 ```
 
 We can observe salary trends over time using player salary data from the Lahman dataset, and US household salary data from the US Census Bureau.
-```{r,warning=FALSE}
-BBsalaries = asdf %>% group_by(yearID) %>% summarize(msalary=median(salary),avg=mean(salary))
+
+```{r,warning=FALSE,echo=FALSE}
+BBsalaries = salaries %>% group_by(yearID) %>% summarize(msalary=median(salary),avg=mean(salary), q25 = quantile(salary,0.25), q75 = quantile(salary,0.75), q90 = quantile(salary,0.9))
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
 USsalaries <- read.csv("USmedsalary.csv")
 USsalaries <- USsalaries %>% filter(yearID > 1984)
@@ -47,10 +46,142 @@ ggplot(allsal,aes(x=yearID)) +
   guides(color = guide_legend(override.aes = list(color = override.color, linetype = override.linetype),title="")) +
   guides(linetype=FALSE)
 
-#have detailed explanation of where datasets came from and what was done to wrangle them
 ```
 
-Using the respective 1985 salaries as a baseline, we see that median player salary growth has not outpaced the salary growth of US households. W
+Using the respective 1985 salaries as a baseline, we see that US median household income has increased by around 25% every 5 years. Median player salary growth generally not outpaced the salary growth of US households until the past decade. Average salary, in contrast, has steadily increased since 1990. This suggests that salary trends for "top" players may be different from that of "average" players.
 
-Since 1985, US median household income has increased by around 25% every 5 years.
-Baseball salary fluctuated through the late 1980s and 90s, but increased dramatically after 2000. Was this related to a performance boost? Average salary has been increasing at a much faster pace. This suggests that the salary for top players is increasing faster than that of "average" players.
+```{r,echo=FALSE}
+override.color <- c("red","red","seagreen3","blue")
+override.linetype <- c(2,1,2,1)
+
+ggplot(allsal,aes(x=yearID)) + 
+  geom_line(aes(y=q25/1000000,color="25th",linetype="25th")) +
+  geom_line(aes(y=msalary.x/1000000,color="50th",linetype="50th")) +
+  geom_line(aes(y=q75/1000000,color="75th",linetype="75th")) +
+  geom_line(aes(y=q90/1000000,color="90th",linetype="90th")) +
+  scale_x_continuous(breaks = seq(1985,2015,5)) +
+  scale_y_continuous(breaks = seq(0,15,2.5)) +
+  labs(x="Year",y="Salary ($, millions)",title="MLB salary growth, percentiles") +
+  scale_color_manual(values = c("red","red","seagreen3","blue")) +
+  scale_linetype_manual(values = c(2,1,2,1)) +
+  guides(color = guide_legend(override.aes = list(color = override.color, linetype = override.linetype),title="")) +
+  guides(linetype=FALSE)
+```
+
+Observing the trends by percentile, we can see that, indeed, salaries have not increased across the board, with large gains for the top paid players, with little change for players in the lower percentiles. We will look at a comparison of percentiles by team.
+
+```{r,echo=FALSE,warning=FALSE}
+salteam <- salaries %>% select(playerID,yearID,teamID,salary) %>% na.omit() %>% group_by(yearID,teamID) %>% summarize(totsal = sum(salary), p50sal = quantile(salary,.5), p90sal = quantile(salary,.9), p90rat = quantile(salary,.9)/median(salary), p10sal = quantile(salary,.9)/quantile(salary,.1))
+
+override.color = c("seagreen3","orangered1")
+salteam %>% ggplot() + 
+  geom_boxplot(aes(yearID,p50sal/1000000,factor=factor(yearID),color="50th"),outlier.shape=NA, na.rm = TRUE) +
+  geom_boxplot(aes(yearID,p90sal/1000000,factor=factor(yearID),color="90th"),outlier.shape=NA, na.rm = TRUE) +
+  scale_x_continuous(breaks = seq(1985,2015,5)) +
+  scale_y_continuous(trans="log10") +
+  scale_color_manual(values = c("seagreen3","orangered1")) +
+  labs(x = "Year", y = "Salary ($, millions)", title = "Salaries across teams") +
+  guides(color = guide_legend(override.aes = list(color = override.color),title="Percentile"))
+```
+
+On a team-by-team basis, we can see that salary growth was not the same between the median and the 90th salary percentiles. In particular, there was a decreasing trend in median salary between 1991 and 1995, where the 90th percentile did not change. What may have caused this?
+
+```{r,echo=FALSE,warning=FALSE}
+salteam %>% ggplot(aes(yearID,p90rat,fill=factor(yearID))) + 
+  geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + 
+  scale_x_continuous(breaks = seq(1985,2015,5)) +
+  scale_y_continuous(breaks = seq(0,30,5)) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=25),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="90th percentile ÷ median salary")
+```
+
+Using the same data to plot the [greater percentage the 90th percentile was receiving], we can see an increasing trend until 1995, the year after the baseball strike of 1994, then a decreasing trend afterwards. Again, percentiles were calculated by team. [Validate with RDD?]
+
+[rdd]
+
+In 1994, two-pronged plan to limit the effect of reduced revenues. First was to enact revenue-sharing in order to keep smaller teams from having to drop out. The other was a salary cap, to limit the labor cost of players. Though the salary thing maybe didn't go through, revenue sharing did. Was it effective?
+
+```{r,echo=FALSE,warning=FALSE}
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+revs <- read.csv("MLBrevs.csv",stringsAsFactors=FALSE)
+names <- read.csv("Teamnames.csv",stringsAsFactors=FALSE)
+cpi <- read.csv("cpi.csv")
+
+# Generate franchise ID for each team in "revs" data gathered from Forbes; accounts for team name changes and standardizes to Lahman franchise notation
+revs$franchID = ""
+for (i in 1:nrow(revs)){
+  nameyear <- names %>% filter(yearID==revs$Year[[i]])
+  nameab <- nameyear %>% filter(grepl(revs$Team[[i]],nameyear$name)==TRUE)
+  revs$franchID[[i]] = nameab$franchID[[1]]
+}
+
+# Calculate inflation factor by year vs 1990 dollars (v1990)
+cpi <- cpi %>% filter(year>1989)
+cpi1990 = cpi$cpi[[1]]
+cpi <- cpi %>% mutate(v1900 = cpi/cpi1990)
+for (i in 1:nrow(revs)){
+  revs$v1990[[i]] = cpi$v1900[which(cpi$year==revs$Year[[i]])]  
+}
+
+ggplot(revs) + geom_boxplot(aes(Year,Revenue/v1990,fill=factor(Year))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=200),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="Revenue in 1990 dollars, millions") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +
+  scale_y_continuous(breaks = seq(0,300,50)) +
+  theme(legend.position="none")
+```
+
+We see that there is a drop in revenues in the year of the stike, but this recovers after a few years. Note that 2012 revenue data is incomplete and skewed upwards.
+
+```{r,echo=FALSE}
+ggplot(revs) + geom_boxplot(aes(Year,Value/v1990,fill=factor(Year))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=500),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="Valuation in 1990 dollars, log millions") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +
+  scale_y_continuous(breaks = c(125,250,500,1000,2000),trans="log10") +
+  theme(legend.position="none")
+```
+
+Team valuations rose greatly after the revenue sharing agreement, and again after 2010. Let's look back at revenues. 2012 valuation data is complete.
+
+```{r}
+revs <- revs[order(revs$franchID,revs$Year),]
+revs$Value = as.numeric(revs$Value)
+
+for (i in 2:nrow(revs)){
+  if (revs$Year[[i]]>1990){
+    revs$dv[[i]] = (revs$Value[[i]]-revs$Value[[i-1]])/revs$Value[[i-1]]
+    revs$dr[[i]] = (revs$Revenue[[i]]-revs$Revenue[[i-1]])/revs$Revenue[[i-1]]
+    revs$di[[i]] = (revs$O_Income[[i]]-revs$O_Income[[i-1]])/revs$O_Income[[i-1]]
+  }
+}
+
+ggplot(revs) + geom_boxplot(aes(Year,dv,fill=factor(Year))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=0.5),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(x="Year",y="Valuation in 1990 dollars, log millions") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +
+  #scale_y_continuous(breaks = c(125,250,500,1000,2000),trans="log10") +
+  theme(legend.position="none")
+```
+
+```{r}
+yearsd = revs %>% group_by(Year) %>% summarize(sd = sd(dv))
+yearsd %>% ggplot() + geom_line(aes(Year,sd))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
