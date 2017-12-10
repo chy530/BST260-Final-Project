@@ -500,7 +500,7 @@ warteam <- wars %>% na.omit() %>% group_by(yearID,teamID) %>%
 warteam %>% ggplot(aes(yearID,medWAR,fill=factor(yearID))) + 
   geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + 
   scale_x_continuous(breaks = seq(1985,2015,5)) + 
-  labs(title = "Wins above average",y = "Median WAR (by team)")
+  labs(title = "Wins Above Replacement (WAR)",y = "Median WAR (by team)")
 
 ```
 
