@@ -3,8 +3,15 @@ title: "Final Project"
 output: html_document
 ---
 
+```{r setup, include=FALSE}
+#reduce knitr figure size
+knitr::opts_chunk$set(fig.width=6, fig.height=4) 
+```
+
 First will look at salaries over time.
 ```{r,warning=FALSE,echo=FALSE,message=FALSE}
+#load libraries
+#load Lahman salary data
 library(tidyverse)
 library(gridExtra)
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
@@ -18,6 +25,9 @@ min(salaries$yearID)
 We can observe salary trends over time using player salary data from the Lahman dataset, and US household salary data from the US Census Bureau.
 
 ```{r,warning=FALSE,echo=FALSE}
+#summarize player salary data
+#load US Census Bureau salary data
+#combine salary data and plot
 BBsalaries = salaries %>% group_by(yearID) %>% summarize(msalary=median(salary),avg=mean(salary), q25 = quantile(salary,0.25), q75 = quantile(salary,0.75), q90 = quantile(salary,0.9))
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
 USsalaries <- read.csv("USmedsalary.csv")
@@ -49,9 +59,10 @@ ggplot(allsal,aes(x=yearID)) +
 
 ```
 
-Using the respective 1985 salaries as a baseline, we see that US median household income has increased by around 25% every 5 years. Median player salary growth generally not outpaced the salary growth of US households until the past decade. Average salary, in contrast, has steadily increased since 1990. This suggests that salary trends for "top" players may be different from that of "average" players.
+Using the respective 1985 salaries as a baseline, we see that US median household income has increased by around 25% every 5 years. Growth in median player salary has generally outpaced the salary growth of US households until the past decade. Average salary, in contrast, has increased at a greater rate since 1990. This suggests that salary trends for "top" players may be different from that of "average" players.
 
 ```{r,echo=FALSE}
+#plot player salary trends for different percentiles
 override.color <- c("red","red","seagreen3","blue")
 override.linetype <- c(2,1,2,1)
 
@@ -69,10 +80,12 @@ ggplot(allsal,aes(x=yearID)) +
   guides(linetype=FALSE)
 ```
 
-Observing the trends by percentile, we can see that, indeed, salaries have not increased across the board, with large gains for the top paid players, with little change for players in the lower percentiles. We will look at a comparison of percentiles by team.
+Observing the trends by percentile, we can see that, indeed, salaries have not increased at the same rate across the board, with large gains for the top paid players, with little change for players in the lower percentiles. We will look at a comparison of percentiles by team.
 
 ```{r,echo=FALSE,warning=FALSE}
-salteam <- salaries %>% select(playerID,yearID,teamID,salary) %>% na.omit() %>% group_by(yearID,teamID) %>% summarize(totsal = sum(salary), p50sal = quantile(salary,.5), p90sal = quantile(salary,.9), p90rat = quantile(salary,.9)/median(salary), p10sal = quantile(salary,.9)/quantile(salary,.1))
+#group by teams
+#plot salary trends for high earners versus median earners
+salteam <- salaries %>% select(playerID,yearID,teamID,salary) %>% na.omit() %>% group_by(yearID,teamID) %>% summarize(totsal = sum(salary), avgsal = mean(salary), p50sal = quantile(salary,.5), p90sal = quantile(salary,.9), p90rat = quantile(salary,.9)/median(salary))
 
 override.color = c("seagreen3","orangered1")
 salteam %>% ggplot() + 
@@ -88,20 +101,52 @@ salteam %>% ggplot() +
 On a team-by-team basis, we can see that salary growth was not the same between the median and the 90th salary percentiles. In particular, there was a decreasing trend in median salary between 1991 and 1995, where the 90th percentile did not change. What may have caused this?
 
 ```{r,echo=FALSE,warning=FALSE}
+#replot previous data as ratio to show trend in relative salary
+#show year of strike
 salteam %>% ggplot(aes(yearID,p90rat,fill=factor(yearID))) + 
   geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + 
   scale_x_continuous(breaks = seq(1985,2015,5)) +
   scale_y_continuous(breaks = seq(0,30,5)) +
   geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
   geom_text(aes(x=1994,y=25),label="STRIKE",angle=90,hjust = 0,color="white") +
-  labs(x="Year",y="90th percentile ÷ median salary")
+  labs(title="Ratio of 90th:50th percentile salaries",x="Year",y="90th percentile ÷ median salary")
 ```
 
-Using the same data to plot the [greater percentage the 90th percentile was receiving], we can see an increasing trend until 1995, the year after the baseball strike of 1994, then a decreasing trend afterwards. Again, percentiles were calculated by team. [Validate with RDD?]
+Using the same data to plot the [greater percentage the 90th percentile was receiving], we can see an increasing trend until 1995, the year after the baseball strike of 1994, then a decreasing trend afterwards. Again, percentiles were calculated by team. 
 
-[rdd]
+Is this a real trend? Let's check with a piecewise linear spline regression.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#piecewise linear spline, 2 methods
+library(splines)
+splfit <- lm(p90rat ~ yearID + yearID*(yearID>1994.5),data=salteam)
+summary(splfit)
+
+library(segmented)
+splfit2 <- lm(p90rat ~ yearID,data=salteam)
+splmod <- segmented(splfit2, seg.Z = ~yearID, psi=1994)
+summary(splmod)
+```
+
+Looks legit.
+Modeling a discontinuous regression also illustrates this break.
+
+```{r,,echo=FALSE,message=FALSE,warning=FALSE}
+#create rdd model
+library(rdd)
+rddfit <- RDestimate(p90rat~yearID,data=salteam,cutpoint=1994.5)
+summary(rddfit)
+```
+
+```{r}
+#plot rdd fit
+plot(rddfit)
+```
+
 
 In 1994, two-pronged plan to limit the effect of reduced revenues. First was to enact revenue-sharing in order to keep smaller teams from having to drop out. The other was a salary cap, to limit the labor cost of players. Though the salary thing maybe didn't go through, revenue sharing did. Was it effective?
+
+Let's look at how team/franchise revenue has changed over time. Data comes from Michael Ozanian, a writer for Forbes, who has been compiling annual financial data for Major League Baseball since 1990. Numbers have been adjusted to 1990 dollars using the Consumer Price Index (CPI).
 
 ```{r,echo=FALSE,warning=FALSE}
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
@@ -128,25 +173,25 @@ for (i in 1:nrow(revs)){
 ggplot(revs) + geom_boxplot(aes(Year,Revenue/v1990,fill=factor(Year))) +
   geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
   geom_text(aes(x=1994,y=200),label="STRIKE",angle=90,hjust = 0,color="white") +
-  labs(x="Year",y="Revenue in 1990 dollars, millions") +
+  labs(title="Team revenues by year",x="Year",y="Revenue in 1990 dollars, millions") +
   scale_x_continuous(breaks = seq(1990,2015,5)) +
   scale_y_continuous(breaks = seq(0,300,50)) +
   theme(legend.position="none")
 ```
 
-We see that there is a drop in revenues in the year of the stike, but this recovers after a few years. Note that 2012 revenue data is incomplete and skewed upwards.
+We see that there is a drop in revenues in the year of the stike, but this recovers after a few years. Note that the 2012 revenue data is incomplete and skewed upwards. What about franchise values?
 
 ```{r,echo=FALSE}
 ggplot(revs) + geom_boxplot(aes(Year,Value/v1990,fill=factor(Year))) +
   geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=5,alpha=0.5, color="red") +
   geom_text(aes(x=1994,y=500),label="STRIKE",angle=90,hjust = 0,color="white") +
-  labs(x="Year",y="Valuation in 1990 dollars, log millions") +
+  labs(title="Team values by year",x="Year",y="Valuation in 1990 dollars, log millions") +
   scale_x_continuous(breaks = seq(1990,2015,5)) +
   scale_y_continuous(breaks = c(125,250,500,1000,2000),trans="log10") +
   theme(legend.position="none")
 ```
 
-Team valuations rose greatly after the revenue sharing agreement, and again after 2010. Let's look back at revenues. 2012 valuation data is complete.
+We can see that the strike did not drastically affect franchise values. Soon after the strike, as revenues recovered, valuations rose greatly after the revenue sharing agreement, and again after 2010 (note that the 2012 valuation data is complete). Let's look back at revenues. 
 
 ```{r,echo=FALSE}
 revs <- revs[order(revs$franchID,revs$Year),]
@@ -163,14 +208,14 @@ for (i in 2:nrow(revs)){
 
 revs %>% filter(Year > 1990) %>% ggplot() + geom_boxplot(aes(Year,dvpct,fill=factor(Year))) +
   geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=7,alpha=0.5, color="red") +
-  geom_text(aes(x=1994,y=0.5),label="STRIKE",angle=90,hjust = 0,color="white") +
-  labs(x="Year",y="Valuation in 1990 dollars, log millions") +
+  geom_text(aes(x=1994,y=-1),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(title="Annual changes in revenue",x="Year",y="Change in revenue ($, millions)") +
   scale_x_continuous(breaks = seq(1990,2015,5)) +
   #scale_y_continuous(breaks = c(125,250,500,1000,2000),trans="log10") +
   theme(legend.position="none")
 ```
 
-
+We can see that teams mostly have increasing revenues year-on-year, with the biggest increases in 1997 and 2014. That's good, but the big point of the revenue sharing agreement was to prevent losses. Was this accomplished?
 
 ```{r,echo=FALSE}
 revs$deval <- ifelse(revs$dv<0,1,0)
@@ -195,23 +240,25 @@ oloss.plot <- base.plot + geom_bar(aes(Year,teams*100,fill=teams*100),stat="iden
   geom_text(aes(x=2003,y=80),label="CBA9",hjust = 0,color="black",size=3.5) +
   geom_text(aes(x=2007.2,y=80),label="CBA10",hjust = 0,color="black",size=3.5) +
   geom_text(aes(x=2012,y=80),label="CBA11",hjust = 0,color="black",size=3.5) +
-  labs(y="Teams with operating loss (%)")
+  labs(title="Operating losses and lost value",y="Teams with\noperating loss (%)")
 
 deval <- revs %>% filter(Year>1990) %>% group_by(Year) %>% summarize(teams = sum(deval)/n())
 deval.plot <- base.plot + geom_bar(aes(Year,teams*100,fill=teams*100),stat="identity",data=deval) +
   scale_y_continuous(breaks=seq(0,80,10)) +
-  labs(y="Teams that lost value (%)")
+  labs(y="Teams that \n lost value (%)")
 
 grid.arrange(oloss.plot,deval.plot,ncol=1)
 ```
 
 regress/anova by cba?
-```{r}
+```{r,echo=FALSE}
 summary(lm(teams ~ Year,data=oloss))
 summary(lm(teams ~ Year,data=deval))
 ```
 
-```{r}
+Can see that there is a decreasing trend, with the percentage of teams decreasing by ~1.5% ... teams losing value or with operating loss with every year, for a roughly 30% decrease over 20 years. (percentage points?)
+
+```{r,echo=FALSE}
 addcba <- function(df){
   df$cba = .bincode(df$Year,c(0,1993.5,1994.5,2002,2006,2010,10000))
   df$cba = ifelse(df$cba>2,df$cba+5,df$cba)
@@ -222,10 +269,15 @@ addcba <- function(df){
 oloss = addcba(oloss)
 deval = addcba(deval)
 
-summary(lm(teams ~ cba,data=oloss))
-summary(lm(teams ~ cba,data=deval))
+anova.oloss <- aov(teams ~ as.factor(cba),data=oloss)
+summary(anova.oloss)
+TukeyHSD(anova.oloss)
+anova.deval <-aov(teams ~ as.factor(cba),data=deval)
+summary(anova.deval)
+TukeyHSD(anova.deval)
 ```
 
+We can see that the measures taken in CBAs since the strike have reduced and kept down the number of teams losing value.
 
 Measures seem to prevent teams from losing value year-on-year.
 
@@ -237,9 +289,27 @@ https://www.fangraphs.com/tht/a-history-of-the-collective-bargaining-agreement-p
 
 So it seems like the measures accomplish the goal of keeping teams on good financial footing. Let's see how they affect team composition.
 
+```{r}
+totsals <- salteam %>% group_by(yearID) %>% mutate(mutot = mean(totsal),sdtot = sd(totsal))
+totsals <- totsals %>% mutate(stdtot = (totsal-mutot)/sdtot)
+totsals %>% ggplot() + geom_point(aes(yearID,stdtot,group=yearID),size=1) +
+  geom_smooth(aes(yearID,stdtot))
+
+revsals <- revs %>% rename(yearID=Year)
+revsals <- left_join(revsals,names,by=c("yearID","franchID"))
+revsals <- left_join(revsals,totsals,by=c("yearID","teamID"))
+revsals <- revsals %>% mutate(pctrev = totsal/(Revenue*1000000))
+revsals %>% ggplot() + geom_boxplot(aes(yearID,pctrev,fill=factor(yearID))) +
+  geom_vline(aes(xintercept=as.numeric(1994)),linetype=1,size=7,alpha=0.5, color="red") +
+  geom_text(aes(x=1994,y=0.0),label="STRIKE",angle=90,hjust = 0,color="white") +
+  labs(title="Percent of revenue spent on player payroll",x="Year",y="Percentage of revenue ($, millions)") +
+  scale_x_continuous(breaks = seq(1990,2015,5)) +theme(legend.position="none")
+```
+
+
 WAR is a stat and blah blah blah
 ```{r,echo=FALSE,eval=FALSE}
-# Add salary and other numbers to WAR table
+# Add salary and other numbers to WAR (for batters) table
 1 = 1 #prevent running accidentally since this takes a while to run
 
 library(tidyverse)
@@ -247,7 +317,6 @@ setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017/war_a
 wars <- read.csv("war_daily_bat.csv",stringsAsFactors=FALSE)
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
 salaries <- read.csv("Salaries.csv",stringsAsFactors=FALSE)
-#bats <- read.csv("batting.csv")
 
 salaries <- salaries %>% filter(yearID > 1969 & yearID < 2017)
 wars <- wars %>% filter(year_ID > 1969)
@@ -315,6 +384,70 @@ setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
 write.csv(wars,"warplus.csv")
 ```
 
+```{r,echo=FALSE,eval=FALSE}
+# Add salary and other numbers to WAR (for pitchers) table 
+1 = 1 #prevent running accidentally since this takes a while to run
+
+library(tidyverse)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017/war_archive-2017-11-08")
+wars <- read.csv("war_daily_pitch.csv",stringsAsFactors=FALSE)
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+salaries <- read.csv("Salaries.csv",stringsAsFactors=FALSE)
+
+salaries <- salaries %>% filter(yearID > 1969 & yearID < 2017)
+wars <- wars %>% filter(year_ID > 1969)
+wars <- wars %>% rename(playerID=player_ID,yearID=year_ID,teamID=team_ID)
+
+salaries <- salaries[order(salaries$playerID,salaries$yearID),]
+wars <- wars[order(wars$playerID,wars$yearID),]
+
+#Determine salary bumps/reductions in WAR dataset
+players <- unique(wars$playerID)
+wars$salary[which(wars$salary=="NULL")] <- "-999"
+wars$salary <- as.numeric(wars$salary)
+
+wars$bump = 0
+wars$cut = 0
+wars$dsal = 0
+
+wars$WAA = as.numeric(wars$WAA)
+wars$WAR = as.numeric(wars$WAR)
+
+player1 <- wars$playerID[[1]]
+for (i in 2:nrow(wars)) {
+  if (wars$playerID[[i]] == player1){
+    wars$prevWAA[[i]] = wars$WAA[[i-1]]
+    wars$dWAA[[i]] = wars$WAA[[i]] - wars$WAA[[i-1]]
+    
+    wars$prevWAR[[i]] = wars$WAR[[i-1]]
+    wars$dWAR[[i]] = wars$WAR[[i]] - wars$WAR[[i-1]]
+    
+    if (wars$salary[[i]]==-999){
+      wars$salary[[i]]=wars$salary[[i-1]]
+    }
+    #bump if salary increased
+    if (wars$salary[[i]] > wars$salary[[i-1]]){
+      wars$bump[[i]] = 1
+    }
+    #cut if salary decreased
+    else if (wars$salary[[i]] < wars$salary[[i-1]]){
+      wars$cut[[i]] = 1
+    }
+    wars$dsal[[i]] = wars$salary[[i]] - wars$salary[[i-1]]
+    wars$pdsal[[i]] = (wars$salary[[i]] - wars$salary[[i-1]])/wars$salary[[i-1]]
+  }
+  else{
+    player1 <- wars$playerID[[i]]
+    if (wars$salary[[i]]==-999){
+      wars$salary[[i]]=0
+    }
+  }
+}
+
+setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
+write.csv(wars,"warpitchplus.csv")
+```
+
 ```{r,echo=FALSE,warning=FALSE}
 library(tidyverse)
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017")
@@ -354,7 +487,7 @@ warteam <- wars %>% na.omit() %>% group_by(yearID,teamID) %>%
 warteam %>% ggplot(aes(yearID,medWAR,fill=factor(yearID))) + 
   geom_boxplot(na.rm = TRUE) + theme(legend.position="none") + 
   scale_x_continuous(breaks = seq(1985,2015,5)) + 
-  labs(y = "Median WAR (by team)")
+  labs(title = "Wins above average",y = "Median WAR (by team)")
 
 ```
 
@@ -363,11 +496,13 @@ warteam %>% ggplot(aes(yearID,medWAR,fill=factor(yearID))) +
 warteam$franchID = ""
 warteam$wlratio = 0
 warteam$rank = 0
+warteam$wpct = 0
 for (i in 1:nrow(warteam)){
   nameyear <- names %>% filter(yearID==warteam$yearID[[i]])
   nameab <- nameyear %>% filter(nameyear$teamIDBR==warteam$teamID[[i]])
   warteam$franchID[[i]] = nameab$franchID[[1]]
   warteam$wlratio[[i]] = nameab$W[[1]]/nameab$L[[1]]
+  warteam$wpct[[i]] = nameab$W[[1]]/(nameab$W[[1]]+nameab$L[[1]])
   warteam$rank[[i]] = nameab$Rank[[1]]
 }
 
@@ -387,36 +522,33 @@ for (i in 1:nrow(warteam)){
 ```
 
 add vline, change palette
-```{r,echo=FALSE}
-jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
-
+```{r}
 warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=medWAR)) + 
   scale_x_continuous(breaks = seq(1985,2015,5)) + 
   #scale_y_discrete(labels = rev(allwar$franchID)) +
-  scale_fill_gradientn(colors = jet.colors(10),name="Median WAR\n   (offense)") +
-  labs(x="Year",y="Team/Franchise")
+  scale_fill_gradient(low="#00007F", high="red", name="WAR") +
+  geom_vline(aes(xintercept=1994),linetype=3,size=1, color="white") +
+  labs(title="Median WAR by team",x="Year",y="Team/Franchise")
+```
 
+```{r,echo=FALSE}
 warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=q75WAR)) + 
   scale_x_continuous(breaks = seq(1985,2015,5)) + 
   #scale_y_discrete(labels = rev(allwar$franchID)) +
-  scale_fill_gradientn(colors = jet.colors(10),name="75th pctile WAR\n     (offense)") +
-  labs(x="Year",y="Team/Franchise")
+  scale_fill_gradient(low="#00007F", high="red", name="WAR") +
+  geom_vline(aes(xintercept=1994),linetype=3,size=1, color="white") +
+  labs(title="75 percentile WAR by team",x="Year",y="Team/Franchise")
 ```
 
 The teams with the highest WAR prior to 2000 
 
-```{r,echo=FALSE}
-warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=wlratio)) + 
+```{r}
+warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=wpct)) + 
   scale_x_continuous(breaks = seq(1985,2015,5)) + 
   #scale_y_discrete(labels = rev(allwar$franchID)) +
-  scale_fill_gradientn(colors = jet.colors(10), name="wlS") +
-  labs(x="Year",y="Team/Franchise")
-
-warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=rank)) + 
-  scale_x_continuous(breaks = seq(1985,2015,5)) + 
-  #scale_y_discrete(labels = rev(allwar$franchID)) +
-  scale_fill_gradientn(colors = jet.colors(10), name="wlS") +
-  labs(x="Year",y="Team/Franchise")
+  scale_fill_gradient(low="#00007F", high="red", name="Win\nPercentage") +
+  geom_vline(aes(xintercept=1994),linetype=3,size=1, color="white") +
+  labs(title="Win percentage by team",x="Year",y="Team/Franchise")
 ```
 
 WL ratio and rank were not affected, random as always.
@@ -435,6 +567,8 @@ salmax95 <- merge(salmax95,playernames,by="playerID")
 salmax95$fullname <- with(salmax95, paste0(nameFirst," ",nameLast))
 salmax95 <- salmax95[order(salmax95$salary),]
 
+#salmax95 %>% summarize(Name = fullname, Team = teamID, Salary = salary)
+
 library(ggrepel)
 salmax95 %>% ggplot(aes(x=1995,y=salary/1000000,label=nameFirst)) +
   geom_text_repel(aes(label=fullname),segment.color = 'grey3',segment.alpha=0.25,label.padding=1.5) + 
@@ -444,6 +578,32 @@ salmax95 %>% ggplot(aes(x=1995,y=salary/1000000,label=nameFirst)) +
   labs(title="Highest-paid players per team, 1995",x="",y = "Salary ($, millions)")
 ```
 
+```{r}
+for (i in 1:nrow(revs)) {
+  revs$TID[[i]] = names$teamID[which(names$yearID==revs$Year[[i]] & names$franchID==revs$franchID[[i]])]
+}
+for (i in 1:nrow(salmax95)) {
+  salmax95$teamname[[i]] <- revs$Team[which(revs$Year==1995 & revs$TID==salmax95$teamID[[i]])]  
+}
+salmax95$teamname <- as.character(salmax95$teamname)
+salmax95 <- salmax95 %>% mutate(salchr = paste("$",round(salary/100000)/10,sep=""))
+salmax95 %>% select(fullname,teamname,salchr) %>% rename(Name=fullname,Team=teamname,Salary=salchr) %>% arrange(desc(Salary))
+```
+
+
+```{r,echo=FALSE}
+library(ggrepel)
+salmax95 %>% ggplot() +
+  aes(x=1,y=1,size=salary,color=salary,label=fullname) +
+  geom_text_repel(segment.size=0, force=100,nudge_x = 1,nudge_y = 0.25) + 
+  scale_color_gradientn(colors=c("#00007F","skyblue","orange","red"),breaks=seq(0,10,2)) +
+  scale_x_continuous(breaks=c()) +
+  theme(axis.line=element_blank(), axis.text.y=element_blank(), axis.ticks=element_blank(), panel.background = element_blank(), panel.grid.major = element_blank()) +
+  scale_size(range = c(4, 8), guide = FALSE) +
+  labs(title="",x="",y = "")
+```
+
+
 Max salaries in a team went to future Hall of Famers Ken Griffey Jr., Barry Larkin, Kirby Puckett, and Cal Ripken, Jr., as well as other popular players of the time, including Barry Bonds, Jose Canseco, Mark McGwire, and Daryl Strawberry. So, it seems that salaries went to popular players, who were presumably also the players who played well.
 
 Do better players make more?
@@ -451,6 +611,7 @@ Do better players make more?
 ```{r}
 #Previously calculated salary changes and performance changes year-to-year and saved in warplus.csv
 warstats <- wars %>% filter(pitcher=="N")
+#warstats <- wars
 warstats <- warstats[c("playerID","yearID","teamID",
                        "WAA","WAA_off","WAA_def",
                        "WAR","WAR_off","WAR_def",
@@ -463,9 +624,6 @@ warstats <- warstats %>% filter(yearID > 1985)
 
 warstats <- warstats %>% filter(dsal!=0)
 warstats <- warstats %>% filter(abs(dsal)>1)
-
-warzeros <- warstats %>% filter(dsal==0)
-warzeros %>% ggplot() + geom_histogram(aes(as.numeric(prevWAA_off)),binwidth=0.05)
 
 warcut <- warstats %>% filter(dsal<0)
 warcut %>% ggplot() + geom_histogram(aes(as.numeric(prevWAA_off)),binwidth=0.05)
@@ -496,11 +654,7 @@ warstats %>% ggplot() +
   scale_y_continuous(breaks=seq(-30,30,5)) +
   labs(x="WAR in previous year", y="Salary change ($, millions)")
 
-warstats %>% ggplot() + 
-  geom_point(aes(prevWAR,dsal/1000000)) +
-  geom_smooth(aes(prevWAR,dsal/1000000)) +
-  scale_y_continuous(breaks=seq(-30,30,5)) +
-  labs(x="WAR in previous year", y="Salary change ($, millions)")
+
 
 # warbump %>% filter(pdsal < 10000) %>% ggplot() + 
 #   scale_y_continuous(trans="log10") +
@@ -510,6 +664,17 @@ warstats %>% ggplot() +
 ```
 
 Again, doesn't look like much. Let's look at the regression.
+
+What about for a single year?
+
+```{r}
+warstats %>% filter(yearID==1991) %>% ggplot() + 
+  geom_point(aes(prevWAR,salary/1000000)) +
+  geom_smooth(aes(prevWAR,salary/1000000)) +
+  scale_y_continuous(breaks=seq(-30,30,5),trans="log10") +
+  labs(x="WAR in previous year", y="Salary change ($, millions)")
+```
+
 
 ```{r}
 w2 <- warstats %>% filter(yearID==1991)
@@ -522,16 +687,49 @@ summary(lm(w2$dsal ~ w2$prevWAR + w2$dWAR) )
 
 Sure enough, doesn't look like much. But what if it changes over time?
 
-```{r}
+```{r,echo=FALSE}
 w2 <- warstats
 
 library(broom)
-regres <- w2 %>% group_by(yearID) %>% do(glance(lm(dsal ~ prevWAR,data=.)))
+regres <- w2 %>% group_by(yearID) %>% do(glance(lm(salary ~ prevWAR,data=.)))
 
-regres %>% ggplot() + geom_bar(aes(yearID,adj.r.squared),stat="identity")
+regres %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat="identity") +
+    scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
+    scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
+    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="white") +
+    geom_text(aes(x=1986,y=.5),label="CBA6",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1990.5,y=.5),label="CBA7",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1997,y=.5),label="CBA8",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2003,y=.5),label="CBA9",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2007.2,y=.5),label="CBA10",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2012,y=.5),label="CBA11",hjust = 0,color="black",size=3.5) +
+    geom_vline(aes(xintercept=1989.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1993.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1994.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2001.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
+    labs(title="Correlation between previous year's WAR and current salary",x="Year",y="Adjusted R-squared")
 ```
 
 ```{r}
+addcba <- function(df){
+  df$cba = .bincode(df$yearID,c(0,1993.5,1994.5,2002,2006,2010,10000))
+  df$cba = ifelse(df$cba>2,df$cba+5,df$cba)
+  df$cba = ifelse(df$cba==1,df$cba+6,df$cba)
+  df$cba = ifelse(df$cba==2,NA,df$cba)
+  df
+}
+
+regres <- addcba(regres)
+
+anova.reg <- aov(adj.r.squared ~ as.factor(cba),data=regres)
+summary(anova.reg)
+TukeyHSD(anova.reg)
+```
+
+
+```{r,echo=FALSE}
 w2 <- warstats
 
 library(broom)
@@ -552,15 +750,290 @@ regres %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat
     geom_vline(aes(xintercept=1994.5),linetype=3, color="black") +
     geom_vline(aes(xintercept=2001.5),linetype=3, color="black") +
     geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
-    geom_vline(aes(xintercept=2010.5),linetype=3, color="black")
+    geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
+    labs(title="Correlation between WAR and salary in the same year",x="Year",y="Adjusted R-squared")
 ```
+
+```{r}
+regres <- addcba(regres)
+
+anova.reg <- aov(adj.r.squared ~ as.factor(cba),data=regres)
+summary(anova.reg)
+TukeyHSD(anova.reg)
+```
+
+```{r}
+regres %>% ggplot() + geom_bar(aes(cba,adj.r.squared),stat="identity")# + geom_errorbar()
+```
+
 
 Looks like this may have changed along with the collective bargaining agreements. May have had to do with luxury tax. Or maybe steroid era.
 
-Do better players get awards?
 
 ```{r}
+salteam2 <- left_join(salteam,names,by=c("teamID","yearID"))
+salteam2 <- salteam2 %>% mutate(wlratio = W/L, wpct = W/(W+L))
+salteam3 <- salteam2 %>% group_by(yearID) %>% 
+  mutate(muavgy = mean(avgsal),sdavgy = sd(avgsal),
+         mutoty = mean(totsal),sdtoty = sd(totsal),
+         wpd = totsal/W)
+cpi2 <- cpi %>% rename(yearID = year)
+salteam4 <- merge(salteam3,cpi2,by="yearID")
+salteam4 <- salteam4 %>% mutate(wpd1990 = wpd/v1900)
 
+wlres <- salteam2 %>% group_by(yearID) %>% do(tidy(lm(wlratio ~ totsal,data=.)))
+wlres <- salteam2 %>% group_by(yearID) %>% do(glance(lm(wlratio ~ p50sal,data=.)))
+wlres
+```
+
+```{r,warning=FALSE}
+#yearly standard
+date1 = seq(1985,2010,5)
+date2 = seq(1989,2014,5)
+dates = data.frame(date1,date2)
+
+for(i in 1:6){
+  tmpsal <- salteam3 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
+  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
+  wlres <- tmpsal %>% lm(wpct ~ stdsal,data=.)
+  print(summary(wlres))
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wpct)) + geom_smooth(aes(stdsal,wpct))
+  print(myplot)
+}
+
+```
+
+```{r,warning=FALSE}
+#5 year standard
+date1 = seq(1985,2010,5)
+date2 = seq(1989,2014,5)
+dates = data.frame(date1,date2)
+
+for(i in 1:6){
+  tmpsal <- salteam2 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
+  meansdsal <- tmpsal %>% summarize(meansal = mean(totsal), sdsal = sd(totsal))
+  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - meansdsal$meansal)/meansdsal$sdsal)
+  wlres <- tmpsal %>% lm(wpct ~ stdsal,data=.)
+  print(summary(wlres))
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wpct)) + geom_smooth(aes(stdsal,wpct))
+  print(myplot)
+}
+
+```
+
+```{r,warning=FALSE}
+#yearly standard
+date1 = seq(1985,2010,5)
+date2 = seq(1989,2014,5)
+dates = data.frame(date1,date2)
+
+for(i in 1:6){
+  tmpsal <- salteam3 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
+  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
+  wlres <- tmpsal %>% lm(Rank ~ stdsal,data=.)
+  print(summary(wlres))
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,Rank)) + geom_smooth(aes(stdsal,Rank))
+  print(myplot)
+}
+
+```
+
+```{r,warning=FALSE}
+
+date1 = seq(1985,2010,5)
+date2 = seq(1989,2014,5)
+dates = data.frame(date1,date2)
+
+for(i in 1:6){
+  tmpsal <- salteam2 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
+  meansdsal <- tmpsal %>% summarize(meansal = mean(totsal), sdsal = sd(totsal))
+  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - meansdsal$meansal)/meansdsal$sdsal)
+  wlres <- tmpsal %>% lm(Rank ~ stdsal,data=.)
+  print(summary(wlres))
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,Rank)) + geom_smooth(aes(stdsal,Rank))
+  print(myplot)
+}
+
+```
+
+```{r,warning=FALSE}
+#yearly standard
+date1 = seq(1985,2010,5)
+date2 = seq(1989,2014,5)
+dates = data.frame(date1,date2)
+
+for(i in 1:6){
+  tmpsal <- salteam3 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
+  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
+  wlres <- tmpsal %>% lm(wlratio ~ stdsal,data=.)
+  print(summary(wlres))
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wlratio)) + geom_smooth(aes(stdsal,wlratio))
+  print(myplot)
+}
+
+```
+
+```{r,warning=FALSE}
+
+date1 = seq(1985,2010,5)
+date2 = seq(1989,2014,5)
+dates = data.frame(date1,date2)
+
+for(i in 1:6){
+  tmpsal <- salteam2 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
+  meansdsal <- tmpsal %>% summarize(meansal = mean(totsal), sdsal = sd(totsal))
+  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - meansdsal$meansal)/meansdsal$sdsal)
+  wlres <- tmpsal %>% lm(wlratio ~ stdsal,data=.)
+  print(summary(wlres))
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wlratio)) + geom_smooth(aes(stdsal,wlratio))
+  print(myplot)
+}
+
+```
+
+```{r}
+tmpsal <- salteam3 %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
+reg_totsal <- tmpsal %>% group_by(yearID) %>% do(glance(lm(wpct ~ stdsal,data=.)))
+reg_totsal
+
+tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
+reg_avgsal <- tmpsal %>% group_by(yearID) %>% do(glance(lm(wpct ~ stdsal,data=.)))
+reg_avgsal
+
+tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
+reg_avgsal2 <- tmpsal %>% group_by(yearID) %>% do(tidy(lm(wpct ~ stdsal,data=.)))
+reg_avgsal2 <- reg_avgsal2 %>% filter(term=="stdsal")
+reg_avgsal2
+
+tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
+reg_avgsal3a <- tmpsal %>% group_by(yearID) %>% do(tidy(lm(Rank ~ stdsal,data=.)))
+reg_avgsal3a <- reg_avgsal3a %>% filter(term=="stdsal")
+reg_avgsal3a
+
+tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
+reg_avgsal3b <- tmpsal %>% group_by(yearID) %>% do(glance(lm(Rank ~ stdsal,data=.)))
+reg_avgsal3b
+```
+
+tot1
+
+```{r,echo=FALSE}
+reg_totsal %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat="identity") +
+    scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
+    scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
+    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="black") +
+    geom_text(aes(x=1986,y=.5),label="CBA6",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1990.5,y=.5),label="CBA7",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1997,y=.5),label="CBA8",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2003,y=.5),label="CBA9",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2007.2,y=.5),label="CBA10",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2012,y=.5),label="CBA11",hjust = 0,color="black",size=3.5) +
+    geom_vline(aes(xintercept=1989.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1993.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1994.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2001.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
+    theme(legend.position="none") +
+    labs(title="Correlation of standardized total salary and win percentage by year")
+```
+
+avg1
+
+```{r,echo=FALSE}
+reg_avgsal %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat="identity") +
+    scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
+    scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
+    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1986,y=.5),label="CBA6",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1990.5,y=.5),label="CBA7",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1997,y=.5),label="CBA8",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2003,y=.5),label="CBA9",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2007.2,y=.5),label="CBA10",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2012,y=.5),label="CBA11",hjust = 0,color="black",size=3.5) +
+    geom_vline(aes(xintercept=1989.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1993.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1994.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2001.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
+    theme(legend.position="none") +
+    labs(title="Correlation of average salary and win percentage by year",
+         x="Year",y="Adjusted R-squared")
+```
+
+2
+
+```{r,echo=FALSE}
+ytext = 7
+reg_avgsal2 %>% ggplot() + geom_bar(aes(yearID,estimate*100,fill=estimate),stat="identity") +
+    scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
+    scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
+    geom_text(aes(x=1994,y=1),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1986,y=ytext),label="CBA6",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1990.5,y=ytext),label="CBA7",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1997,y=ytext),label="CBA8",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2003,y=ytext),label="CBA9",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2007.2,y=ytext),label="CBA10",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2012,y=ytext),label="CBA11",hjust = 0,color="black",size=3.5) +
+    geom_vline(aes(xintercept=1989.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1993.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1994.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2001.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
+    theme(legend.position="none") +
+    labs(title="Effect of average salary on win percentage by year",
+         x="Year",y="% change for 1 SD increase in avg. salary")
+```
+
+3a
+
+```{r,echo=FALSE}
+ytext = 1.1
+reg_avgsal3a %>% ggplot() + geom_bar(aes(yearID,-estimate,fill=-estimate),stat="identity") +
+    scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
+    scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
+    geom_text(aes(x=1994,y=0.01),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1986,y=ytext),label="CBA6",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1990.5,y=ytext),label="CBA7",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1997,y=ytext),label="CBA8",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2003,y=ytext),label="CBA9",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2007.2,y=ytext),label="CBA10",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2012,y=ytext),label="CBA11",hjust = 0,color="black",size=3.5) +
+    geom_vline(aes(xintercept=1989.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1993.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1994.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2001.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
+    theme(legend.position="none") +
+    labs(title="Effect of average salary on rank by year",
+         x="Year",y="Increase in rank for a 1 SD increase in avg. salary")
+```
+
+3b
+
+```{r,echo=FALSE}
+ytext = 0.45
+reg_avgsal3b %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat="identity") +
+    scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
+    scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
+    geom_text(aes(x=1994,y=0.01),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1986,y=ytext),label="CBA6",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1990.5,y=ytext),label="CBA7",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=1997,y=ytext),label="CBA8",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2003,y=ytext),label="CBA9",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2007.2,y=ytext),label="CBA10",hjust = 0,color="black",size=3.5) +
+    geom_text(aes(x=2012,y=ytext),label="CBA11",hjust = 0,color="black",size=3.5) +
+    geom_vline(aes(xintercept=1989.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1993.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=1994.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2001.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
+    geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
+    theme(legend.position="none") +
+    labs(title="Correlation of average salary and rank by year",x="Year",y="Adjusted R-squared")
 ```
 
 
