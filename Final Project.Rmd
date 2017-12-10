@@ -9,7 +9,7 @@ knitr::opts_chunk$set(fig.width=6, fig.height=4)
 ```
 
 ##Synopsis
-This project examines economic trends in Major League Baseball. Data sources include the Lahman database (for salaries, performance, and other info), Baseball Reference (for Wins Above Replacement), Forbes (for financials), the US Census Bureau (for US household income), and the Bureau of Labor Statistics (for Consumer Price Index). The data exploration includes trends in player salary, team finances, team performance, and the relationship between salary/spending and player/team performance.
+This project examines economic trends in Major League Baseball. Data sources include the Lahman database (for salaries, performance, and other info), Baseball Reference (for Wins Above Replacement), Forbes (for financials), the US Census Bureau (for US household income), and the Bureau of Labor Statistics (for Consumer Price Index). More details about data sources are on the project website (https://sites.google.com/view/bst260mlm). The data exploration includes trends in player salary, team finances, team performance, and the relationship between salary/spending and player/team performance.
 
 ###Player Salaries
 
