@@ -8,7 +8,11 @@ output: html_document
 knitr::opts_chunk$set(fig.width=6, fig.height=4) 
 ```
 
-First will look at salaries over time.
+##Synopsis
+This project examines economic trends in Major League Baseball. Data sources include the Lahman database (for salaries, performance, and other info), Baseball Reference (for Wins Above Replacement), Forbes (for financials), the US Census Bureau (for US household income), and the Bureau of Labor Statistics (for Consumer Price Index). The data exploration includes trends in player salary, team finances, team performance, and the relationship between salary/spending and player/team performance.
+
+###Player Salaries
+
 ```{r,warning=FALSE,echo=FALSE,message=FALSE}
 #load libraries
 #load Lahman salary data
@@ -22,7 +26,7 @@ Note that salary information is only available from 1985 forward.
 min(salaries$yearID)
 ```
 
-We can observe salary trends over time using player salary data from the Lahman dataset, and US household salary data from the US Census Bureau.
+We can observe salary trends over time using player salary data from the Lahman dataset, and US household salary data.
 
 ```{r,warning=FALSE,echo=FALSE}
 #summarize player salary data
@@ -59,7 +63,7 @@ ggplot(allsal,aes(x=yearID)) +
 
 ```
 
-Using the respective 1985 salaries as a baseline, we see that US median household income has increased by around 25% every 5 years. Growth in median player salary has generally outpaced the salary growth of US households until the past decade. Average salary, in contrast, has increased at a greater rate since 1990. This suggests that salary trends for "top" players may be different from that of "average" players.
+Using the respective 1985 salaries as a baseline, we see that US median household income has increased by around 25% every 5 years. Growth in median player salary has generally outpaced the salary growth of US households until the past decade. Average salary, in contrast, has increased at a greater rate since 1990. This suggests that salary trends for "top" players may be different from that of "typical" players. Let's see if this is true.
 
 ```{r,echo=FALSE}
 #plot player salary trends for different percentiles
@@ -80,7 +84,7 @@ ggplot(allsal,aes(x=yearID)) +
   guides(linetype=FALSE)
 ```
 
-Observing the trends by percentile, we can see that, indeed, salaries have not increased at the same rate across the board, with large gains for the top paid players, with little change for players in the lower percentiles. We will look at a comparison of percentiles by team.
+Observing the trends by percentile, we can see that, indeed, salaries have not increased at the same rate across the board, with large gains for the top paid players, with little change for players in the lower percentiles. We will now look at a comparison of percentiles by team.
 
 ```{r,echo=FALSE,warning=FALSE}
 #group by teams
@@ -112,9 +116,9 @@ salteam %>% ggplot(aes(yearID,p90rat,fill=factor(yearID))) +
   labs(title="Ratio of 90th:50th percentile salaries",x="Year",y="90th percentile ÷ median salary")
 ```
 
-Using the same data to plot the [greater percentage the 90th percentile was receiving], we can see an increasing trend until 1995, the year after the baseball strike of 1994, then a decreasing trend afterwards. Again, percentiles were calculated by team. 
+Using the same data to plot the ratio of the 90th percentile salary to the median, we can see an increasing trend until 1995, the year after the baseball strike of 1994, then a decreasing trend afterwards. Again, percentiles were calculated by team. 
 
-Is this a real trend? Let's check with a piecewise linear spline regression.
+Is this a real trend? Let's check with a piecewise linear spline regression (2 methods).
 
 ```{r,echo=FALSE,message=FALSE,warning=FALSE}
 #piecewise linear spline, 2 methods
@@ -128,7 +132,7 @@ splmod <- segmented(splfit2, seg.Z = ~yearID, psi=1994)
 summary(splmod)
 ```
 
-Looks legit.
+Looks like there are different trends before and after the strike.
 Modeling a discontinuous regression also illustrates this break.
 
 ```{r,,echo=FALSE,message=FALSE,warning=FALSE}
@@ -138,13 +142,14 @@ rddfit <- RDestimate(p90rat~yearID,data=salteam,cutpoint=1994.5)
 summary(rddfit)
 ```
 
-```{r}
+```{r,echo=FALSE}
 #plot rdd fit
 plot(rddfit)
 ```
 
+###Team Revenues
 
-In 1994, two-pronged plan to limit the effect of reduced revenues. First was to enact revenue-sharing in order to keep smaller teams from having to drop out. The other was a salary cap, to limit the labor cost of players. Though the salary thing maybe didn't go through, revenue sharing did. Was it effective?
+Following the strike of 1994, a two-pronged plan was put in place to limit the effect of reduced revenues. First was to enact revenue-sharing in order to keep smaller teams from struggling financially. The other was a luxury tax, which was a way to limit the spending of the big teams without explicitly enforcing a salary cap.
 
 Let's look at how team/franchise revenue has changed over time. Data comes from Michael Ozanian, a writer for Forbes, who has been compiling annual financial data for Major League Baseball since 1990. Numbers have been adjusted to 1990 dollars using the Consumer Price Index (CPI).
 
@@ -191,7 +196,7 @@ ggplot(revs) + geom_boxplot(aes(Year,Value/v1990,fill=factor(Year))) +
   theme(legend.position="none")
 ```
 
-We can see that the strike did not drastically affect franchise values. Soon after the strike, as revenues recovered, valuations rose greatly after the revenue sharing agreement, and again after 2010 (note that the 2012 valuation data is complete). Let's look back at revenues. 
+We can see that the strike did not drastically affect franchise values. Soon after the strike, as revenues recovered, valuations rose greatly after the revenue sharing agreement, and again after 2010 (note that the 2012 valuation data is complete). Let's look back at revenues. How did revenues for each team change from year to year?
 
 ```{r,echo=FALSE}
 revs <- revs[order(revs$franchID,revs$Year),]
@@ -215,7 +220,7 @@ revs %>% filter(Year > 1990) %>% ggplot() + geom_boxplot(aes(Year,dvpct,fill=fac
   theme(legend.position="none")
 ```
 
-We can see that teams mostly have increasing revenues year-on-year, with the biggest increases in 1997 and 2014. That's good, but the big point of the revenue sharing agreement was to prevent losses. Was this accomplished?
+We can see that teams mostly have increasing revenues year-on-year, with the biggest increases in 1997 and 2014. The other goal of the revenue sharing agreement was to prevent losses. Was this accomplished? We will look at this information over time, stratifying by Collective Bargaining Agreement (CBA), the contract between team owners that sets the financial rules of the league. 
 
 ```{r,echo=FALSE}
 revs$deval <- ifelse(revs$dv<0,1,0)
@@ -250,13 +255,14 @@ deval.plot <- base.plot + geom_bar(aes(Year,teams*100,fill=teams*100),stat="iden
 grid.arrange(oloss.plot,deval.plot,ncol=1)
 ```
 
-regress/anova by cba?
+We see that the percentage of teams suffering either an operating loss or loss in franchiase value has decreased over time, particularly following the enactment of CBA10. Is this a real trend? Let's check.
+
 ```{r,echo=FALSE}
 summary(lm(teams ~ Year,data=oloss))
 summary(lm(teams ~ Year,data=deval))
 ```
 
-Can see that there is a decreasing trend, with the percentage of teams decreasing by ~1.5% ... teams losing value or with operating loss with every year, for a roughly 30% decrease over 20 years. (percentage points?)
+The linear models suggest a decreasing trend, with the percentage of teams suffering operating/valuation loss decreasing by ~1.5% every year, for a ~30 percentage point decrease over 20 years (not using compounding). Let's look at differences between the different CBA periods.
 
 ```{r,echo=FALSE}
 addcba <- function(df){
@@ -277,23 +283,21 @@ summary(anova.deval)
 TukeyHSD(anova.deval)
 ```
 
-We can see that the measures taken in CBAs since the strike have reduced and kept down the number of teams losing value.
+The Tukey multiple comparisons show that valuation losses were highest during CBA7 and significantly lower for all periods thereafter. The period differences in operating losses are less clear, although CBA10 is significantly lower than CBA7 and CBA8.
 
-Measures seem to prevent teams from losing value year-on-year.
+sources:
 
 https://www.sbnation.com/2010/8/30/1065675/8-30-2002-baseball-avoids-another
-2002 - new collective bargaining agreement that increasing rev sharing 70% and added luxury tax
-
 https://www.fangraphs.com/tht/a-history-of-the-collective-bargaining-agreement-part-3/
-^good
 
-So it seems like the measures accomplish the goal of keeping teams on good financial footing. Let's see how they affect team composition.
+The analysis suggests that the measures taken in successive CBAs since the 1994 strike have improved the financial sitation of the league. Did this affect spending on players?
 
-```{r}
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
 totsals <- salteam %>% group_by(yearID) %>% mutate(mutot = mean(totsal),sdtot = sd(totsal))
 totsals <- totsals %>% mutate(stdtot = (totsal-mutot)/sdtot)
 totsals %>% ggplot() + geom_point(aes(yearID,stdtot,group=yearID),size=1) +
-  geom_smooth(aes(yearID,stdtot))
+  geom_smooth(aes(yearID,stdtot)) +
+  labs(title="Standardized payrolls",x="Year",y="Std. total salary")
 
 revsals <- revs %>% rename(yearID=Year)
 revsals <- left_join(revsals,names,by=c("yearID","franchID"))
@@ -306,11 +310,20 @@ revsals %>% ggplot() + geom_boxplot(aes(yearID,pctrev,fill=factor(yearID))) +
   scale_x_continuous(breaks = seq(1990,2015,5)) +theme(legend.position="none")
 ```
 
+We can see that the standardized distribution of payrolls across the league remained fairly consistent until after 2001, after which there was one team (the Yankees, obviously) with a much higher spend for several years.
 
-WAR is a stat and blah blah blah
+Looking at percentage of revenue spent, it appears that player payrolls have been around 50% of franchise revenue for the past 20 years, with the exception of the strike year and year immediately following, where revenues took a hit.
+
+###Performance
+
+As a measure of player performance, we will use Wins Above Replacement (WAR). The calculation is very involved and not standardized, so the WAR numbers were taken from the Baseball Refernce database (not the same as the Lahman Database).
+
+First, let's look at how WAR distribution across the league has changed over time.
+
 ```{r,echo=FALSE,eval=FALSE}
-# Add salary and other numbers to WAR (for batters) table
-1 = 1 #prevent running accidentally since this takes a while to run
+# Adds salary and other numbers to WAR (for batters) table
+# This block saves code to a csv, which is saved in the project folder.
+1 = 1 #prevents running accidentally since this takes a while to run
 
 library(tidyverse)
 setwd("/Users/Chris/Dropbox/School Stuff/BST 260 Data Science/baseball2017/war_archive-2017-11-08")
@@ -491,6 +504,7 @@ warteam %>% ggplot(aes(yearID,medWAR,fill=factor(yearID))) +
 
 ```
 
+We can see that WAR variance decreases over time, and stays low after 1996. This could be due to the revenue-sharing agreements, or perhaps due to teams being better about picking players. Regardless, it would seem that the post-strike era is more competitive than before the strike. Let's explore this further.
 
 ```{r,echo=FALSE}
 warteam$franchID = ""
@@ -521,8 +535,9 @@ for (i in 1:nrow(warteam)){
 }
 ```
 
-add vline, change palette
-```{r}
+First, let's look at median WAR by team, sorted by summed WAR prior to the year 2000.
+
+```{r,echo=FALSE}
 warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=medWAR)) + 
   scale_x_continuous(breaks = seq(1985,2015,5)) + 
   #scale_y_discrete(labels = rev(allwar$franchID)) +
@@ -530,6 +545,8 @@ warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=medWAR)) +
   geom_vline(aes(xintercept=1994),linetype=3,size=1, color="white") +
   labs(title="Median WAR by team",x="Year",y="Team/Franchise")
 ```
+
+From the heat map, it seems that the teams that consistently had better players before the strike (marked by the dotted white line) lost that advantage after the strike. Let's look at the better players (75th percentile) in each team.
 
 ```{r,echo=FALSE}
 warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=q75WAR)) + 
@@ -540,9 +557,9 @@ warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=q75WAR)) +
   labs(title="75 percentile WAR by team",x="Year",y="Team/Franchise")
 ```
 
-The teams with the highest WAR prior to 2000 
+The change is less evident here. Let's see if this affected team performance.
 
-```{r}
+```{r,echo=FALSE}
 warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=wpct)) + 
   scale_x_continuous(breaks = seq(1985,2015,5)) + 
   #scale_y_discrete(labels = rev(allwar$franchID)) +
@@ -551,11 +568,10 @@ warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=wpct)) +
   labs(title="Win percentage by team",x="Year",y="Team/Franchise")
 ```
 
-WL ratio and rank were not affected, random as always.
+There is no disernable pattern here. No team is overly dominant in the league, either before or after the strike. Case in point: Houston, which above is visibly the worst team between 2010-2015, just won the World Series.
 
-What kind of players were paid more?
+What kind of players were paid more? Let's look at the year 1995.
 
-[1995]
 ```{r,warning=FALSE,echo=FALSE,message=FALSE}
 salmax95 <- salaries %>% filter(yearID==1995) %>% select(playerID,teamID,salary) %>% na.omit() %>% group_by(teamID) %>% filter(salary == max(salary))
 salmax95 <- unique(salmax95)
@@ -578,7 +594,9 @@ salmax95 %>% ggplot(aes(x=1995,y=salary/1000000,label=nameFirst)) +
   labs(title="Highest-paid players per team, 1995",x="",y = "Salary ($, millions)")
 ```
 
-```{r}
+The above visualization sounded like a better idea than it turned out to be. Let's look at a table instead.
+
+```{r,echo=FALSE}
 for (i in 1:nrow(revs)) {
   revs$TID[[i]] = names$teamID[which(names$yearID==revs$Year[[i]] & names$franchID==revs$franchID[[i]])]
 }
@@ -590,6 +608,9 @@ salmax95 <- salmax95 %>% mutate(salchr = paste("$",round(salary/100000)/10,sep="
 salmax95 %>% select(fullname,teamname,salchr) %>% rename(Name=fullname,Team=teamname,Salary=salchr) %>% arrange(desc(Salary))
 ```
 
+The max salaries for each team went to future Hall of Famers Ken Griffey Jr., Barry Larkin, Kirby Puckett, and Cal Ripken, Jr., as well as other popular players of the time, including Barry Bonds, Jose Canseco, Mark McGwire, and Daryl Strawberry. So, it seems that salaries went to popular players, who were presumably also the players who played well.
+
+Here's a word cloud, with sizes/color corresponding to salary:
 
 ```{r,echo=FALSE}
 library(ggrepel)
@@ -603,10 +624,13 @@ salmax95 %>% ggplot() +
   labs(title="",x="",y = "")
 ```
 
+Moving on.
 
-Max salaries in a team went to future Hall of Famers Ken Griffey Jr., Barry Larkin, Kirby Puckett, and Cal Ripken, Jr., as well as other popular players of the time, including Barry Bonds, Jose Canseco, Mark McGwire, and Daryl Strawberry. So, it seems that salaries went to popular players, who were presumably also the players who played well.
+###Money vs. Performance
 
-Do better players make more?
+[Note that I left in a lot of data exploration in this section, so it will be a bit messier than above.]
+
+Do better players make more? Let's first look at how WAR may have influenced changes in salary.
 
 ```{r}
 #Previously calculated salary changes and performance changes year-to-year and saved in warplus.csv
@@ -626,21 +650,26 @@ warstats <- warstats %>% filter(dsal!=0)
 warstats <- warstats %>% filter(abs(dsal)>1)
 
 warcut <- warstats %>% filter(dsal<0)
-warcut %>% ggplot() + geom_histogram(aes(as.numeric(prevWAA_off)),binwidth=0.05)
+warcut %>% ggplot() + geom_histogram(aes(as.numeric(prevWAR)),binwidth=0.05) +
+  labs(title="Players who received a salary decrease",x="Wins Above Replacement")
 
 warbump <- warstats %>% filter(dsal>0)
-warbump %>% ggplot() + geom_histogram(aes(as.numeric(prevWAA_off)),binwidth=0.05)
+warbump %>% ggplot() + geom_histogram(aes(as.numeric(prevWAR)),binwidth=0.05) +
+  labs(title="Players who received a salary increase",x="Wins Above Replacement")
 ```
 
-Doesn't say much. Let's look at other trends.
 
-```{r}
+All of the performance stats (including Wins Above Average (WAA), offensive and defensive stats, and previous and current performance/salary) listed in the above chunk of code were tested. No obvious trend was there. Let's look at other trends.
+
+
+```{r,message=FALSE}
 warstats$pdsal[which(warstats$pdsal==Inf)] = NA
 
 warstats %>% filter(pdsal < 40, dsal > -100000) %>% ggplot() + 
   geom_point(aes(prevWAA_off,dsal + abs(min(dsal))+1 )) +
   geom_smooth(aes(prevWAA_off,dsal + abs(min(dsal))+1 )) +
-  scale_y_continuous(trans="log10")
+  scale_y_continuous(trans="log10") +
+  labs(x="WAA in previous year", y="Salary change ($, log millions)")
 
 warstats %>% ggplot() + 
   geom_point(aes(prevWAA_off,dsal/1000000)) +
@@ -654,20 +683,27 @@ warstats %>% ggplot() +
   scale_y_continuous(breaks=seq(-30,30,5)) +
   labs(x="WAR in previous year", y="Salary change ($, millions)")
 
+warstats %>% ggplot() + 
+  geom_point(aes(prevWAR,salary/1000000)) +
+  geom_smooth(aes(prevWAR,salary/1000000)) +
+  scale_y_continuous(breaks=seq(-30,30,5)) +
+  labs(x="WAR in previous year", y="Current salary ($, millions)")
 
-
-# warbump %>% filter(pdsal < 10000) %>% ggplot() + 
-#   scale_y_continuous(trans="log10") +
-#   geom_point(aes(as.numeric(prevWAA_off),pdsal))
-# warcut %>% filter(pdsal < 10000) %>% ggplot() + 
-#   geom_point(aes(as.numeric(prevWAA),pdsal))
 ```
 
-Again, doesn't look like much. Let's look at the regression.
 
-What about for a single year?
+There may be an increasing trend. Let's look at a regression.
+
 
 ```{r}
+summary(lm(warstats$salary~warstats$prevWAR))
+```
+
+
+There is a significant effect, but the R-squared is not convincing. What about for a single year?
+
+
+```{r,message=FALSE,warning=FALSE}
 warstats %>% filter(yearID==1991) %>% ggplot() + 
   geom_point(aes(prevWAR,salary/1000000)) +
   geom_smooth(aes(prevWAR,salary/1000000)) +
@@ -675,17 +711,14 @@ warstats %>% filter(yearID==1991) %>% ggplot() +
   labs(x="WAR in previous year", y="Salary change ($, millions)")
 ```
 
-
 ```{r}
 w2 <- warstats %>% filter(yearID==1991)
-#get est and r^2 by year?
-summary(lm(w2$dsal~w2$prevWAA_off))
-summary(lm(w2$dsal~w2$prevWAR_off))
 summary(lm(w2$dsal~w2$prevWAR))
-summary(lm(w2$dsal ~ w2$prevWAR + w2$dWAR) )
 ```
 
-Sure enough, doesn't look like much. But what if it changes over time?
+
+Sure enough, this looks a bit more convincing. Let's look at this over several years.
+
 
 ```{r,echo=FALSE}
 w2 <- warstats
@@ -712,7 +745,7 @@ regres %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat
     labs(title="Correlation between previous year's WAR and current salary",x="Year",y="Adjusted R-squared")
 ```
 
-```{r}
+```{r,echo=FALSE}
 addcba <- function(df){
   df$cba = .bincode(df$yearID,c(0,1993.5,1994.5,2002,2006,2010,10000))
   df$cba = ifelse(df$cba>2,df$cba+5,df$cba)
@@ -727,6 +760,9 @@ anova.reg <- aov(adj.r.squared ~ as.factor(cba),data=regres)
 summary(anova.reg)
 TukeyHSD(anova.reg)
 ```
+
+
+We see that the correlation between current salary and WAR in the previous year changes over time, with greater correlation during CBA6-CBA9, and less thereafter.
 
 
 ```{r,echo=FALSE}
@@ -754,7 +790,7 @@ regres %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat
     labs(title="Correlation between WAR and salary in the same year",x="Year",y="Adjusted R-squared")
 ```
 
-```{r}
+```{r,echo=FALSE}
 regres <- addcba(regres)
 
 anova.reg <- aov(adj.r.squared ~ as.factor(cba),data=regres)
@@ -762,15 +798,15 @@ summary(anova.reg)
 TukeyHSD(anova.reg)
 ```
 
-```{r}
-regres %>% ggplot() + geom_bar(aes(cba,adj.r.squared),stat="identity")# + geom_errorbar()
-```
+
+Looking at salary and performance within the same year, we see that the highest correlation was during CBA8, though there were significant differences between periods.
+
+Why would this correlation change with the collective bargaining agreements? Perhaps it had to do with luxury tax. Or perhaps teams simply got better at paying players less. Perhaps WAR doesn't tell the whole story.
+
+Now let's look at how salary may have affected team performances, in successive five-year periods. First, win percentage against salary, with salary standardized by year.
 
 
-Looks like this may have changed along with the collective bargaining agreements. May have had to do with luxury tax. Or maybe steroid era.
-
-
-```{r}
+```{r,echo=FALSE}
 salteam2 <- left_join(salteam,names,by=c("teamID","yearID"))
 salteam2 <- salteam2 %>% mutate(wlratio = W/L, wpct = W/(W+L))
 salteam3 <- salteam2 %>% group_by(yearID) %>% 
@@ -781,29 +817,38 @@ cpi2 <- cpi %>% rename(yearID = year)
 salteam4 <- merge(salteam3,cpi2,by="yearID")
 salteam4 <- salteam4 %>% mutate(wpd1990 = wpd/v1900)
 
-wlres <- salteam2 %>% group_by(yearID) %>% do(tidy(lm(wlratio ~ totsal,data=.)))
+#wlres <- salteam2 %>% group_by(yearID) %>% do(tidy(lm(wlratio ~ totsal,data=.)))
 wlres <- salteam2 %>% group_by(yearID) %>% do(glance(lm(wlratio ~ p50sal,data=.)))
-wlres
 ```
 
-```{r,warning=FALSE}
+```{r,warning=FALSE,message=FALSE}
 #yearly standard
+require(gridExtra)
 date1 = seq(1985,2010,5)
 date2 = seq(1989,2014,5)
 dates = data.frame(date1,date2)
+plots = list()
 
 for(i in 1:6){
   tmpsal <- salteam3 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
   tmpsal <- tmpsal %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
   wlres <- tmpsal %>% lm(wpct ~ stdsal,data=.)
   print(summary(wlres))
-  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wpct)) + geom_smooth(aes(stdsal,wpct))
-  print(myplot)
+  label = paste(dates$date1[[i]],dates$date2[[i]],sep="-")
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wpct)) + geom_smooth(aes(stdsal,wpct)) + labs(title=label,x="Standardized Salary",y="Win Percentage")
+  newvar = paste("myplot",i,sep="")
+  assign(newvar,myplot)
+  #print(myplot)
 }
 
+grid.arrange(myplot1,myplot2,myplot3,myplot4,myplot5,myplot6,ncol=3)
 ```
 
-```{r,warning=FALSE}
+
+Next, win percentage against salary, with salary standardized over each 5-year period.
+
+
+```{r,warning=FALSE,message=FALSE}
 #5 year standard
 date1 = seq(1985,2010,5)
 date2 = seq(1989,2014,5)
@@ -815,30 +860,21 @@ for(i in 1:6){
   tmpsal <- tmpsal %>% mutate(stdsal = (totsal - meansdsal$meansal)/meansdsal$sdsal)
   wlres <- tmpsal %>% lm(wpct ~ stdsal,data=.)
   print(summary(wlres))
-  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wpct)) + geom_smooth(aes(stdsal,wpct))
-  print(myplot)
+  label = paste(dates$date1[[i]],dates$date2[[i]],sep="-")
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wpct)) + geom_smooth(aes(stdsal,wpct)) + labs(title=label,x="Standardized Salary",y="Win Percentage")
+  newvar = paste("myplot",i,sep="")
+  assign(newvar,myplot)
+  #print(myplot)
 }
 
+grid.arrange(myplot1,myplot2,myplot3,myplot4,myplot5,myplot6,ncol=3)
 ```
 
-```{r,warning=FALSE}
-#yearly standard
-date1 = seq(1985,2010,5)
-date2 = seq(1989,2014,5)
-dates = data.frame(date1,date2)
 
-for(i in 1:6){
-  tmpsal <- salteam3 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
-  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
-  wlres <- tmpsal %>% lm(Rank ~ stdsal,data=.)
-  print(summary(wlres))
-  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,Rank)) + geom_smooth(aes(stdsal,Rank))
-  print(myplot)
-}
+Next, league rank against salary, with salary standardized over each 5-year period.
 
-```
 
-```{r,warning=FALSE}
+```{r,warning=FALSE,message=FALSE}
 
 date1 = seq(1985,2010,5)
 date2 = seq(1989,2014,5)
@@ -850,13 +886,22 @@ for(i in 1:6){
   tmpsal <- tmpsal %>% mutate(stdsal = (totsal - meansdsal$meansal)/meansdsal$sdsal)
   wlres <- tmpsal %>% lm(Rank ~ stdsal,data=.)
   print(summary(wlres))
-  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,Rank)) + geom_smooth(aes(stdsal,Rank))
-  print(myplot)
+  label = paste(dates$date1[[i]],dates$date2[[i]],sep="-")
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,Rank)) + geom_smooth(aes(stdsal,Rank)) + labs(title=label,x="Standardized Salary",y="Rank")
+  newvar = paste("myplot",i,sep="")
+  assign(newvar,myplot)
+  #print(myplot)
 }
+
+grid.arrange(myplot1,myplot2,myplot3,myplot4,myplot5,myplot6,ncol=3)
 
 ```
 
-```{r,warning=FALSE}
+
+Next, win-loss ratio against salary, with salary standardized over each 5-year period.
+
+
+```{r,warning=FALSE,message=FALSE}
 #yearly standard
 date1 = seq(1985,2010,5)
 date2 = seq(1989,2014,5)
@@ -867,61 +912,50 @@ for(i in 1:6){
   tmpsal <- tmpsal %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
   wlres <- tmpsal %>% lm(wlratio ~ stdsal,data=.)
   print(summary(wlres))
-  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wlratio)) + geom_smooth(aes(stdsal,wlratio))
-  print(myplot)
+  label = paste(dates$date1[[i]],dates$date2[[i]],sep="-")
+  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wlratio)) + geom_smooth(aes(stdsal,wlratio)) + labs(title=label,x="Standardized Salary",y="Win-Loss Ratio")
+  newvar = paste("myplot",i,sep="")
+  assign(newvar,myplot)
+  #print(myplot)
 }
+
+grid.arrange(myplot1,myplot2,myplot3,myplot4,myplot5,myplot6,ncol=3)
 
 ```
 
-```{r,warning=FALSE}
 
-date1 = seq(1985,2010,5)
-date2 = seq(1989,2014,5)
-dates = data.frame(date1,date2)
+The above analyses seem to indicate better win rates and ranks (with 1 being best) as more money is spent. The correlations vary by period, however, so let's do another year-by-year breakdown.
 
-for(i in 1:6){
-  tmpsal <- salteam2 %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
-  meansdsal <- tmpsal %>% summarize(meansal = mean(totsal), sdsal = sd(totsal))
-  tmpsal <- tmpsal %>% mutate(stdsal = (totsal - meansdsal$meansal)/meansdsal$sdsal)
-  wlres <- tmpsal %>% lm(wlratio ~ stdsal,data=.)
-  print(summary(wlres))
-  myplot <- tmpsal %>% ggplot() + geom_point(aes(stdsal,wlratio)) + geom_smooth(aes(stdsal,wlratio))
-  print(myplot)
-}
-
-```
-
-```{r}
+```{r,echo=FALSE}
 tmpsal <- salteam3 %>% mutate(stdsal = (totsal - mutoty)/sdtoty)
 reg_totsal <- tmpsal %>% group_by(yearID) %>% do(glance(lm(wpct ~ stdsal,data=.)))
-reg_totsal
+#reg_totsal
 
 tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
 reg_avgsal <- tmpsal %>% group_by(yearID) %>% do(glance(lm(wpct ~ stdsal,data=.)))
-reg_avgsal
+#reg_avgsal
 
 tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
 reg_avgsal2 <- tmpsal %>% group_by(yearID) %>% do(tidy(lm(wpct ~ stdsal,data=.)))
 reg_avgsal2 <- reg_avgsal2 %>% filter(term=="stdsal")
-reg_avgsal2
+#reg_avgsal2
 
 tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
 reg_avgsal3a <- tmpsal %>% group_by(yearID) %>% do(tidy(lm(Rank ~ stdsal,data=.)))
 reg_avgsal3a <- reg_avgsal3a %>% filter(term=="stdsal")
-reg_avgsal3a
+#reg_avgsal3a
 
 tmpsal <- salteam3 %>% mutate(stdsal = (avgsal - muavgy)/sdavgy)
 reg_avgsal3b <- tmpsal %>% group_by(yearID) %>% do(glance(lm(Rank ~ stdsal,data=.)))
-reg_avgsal3b
+#reg_avgsal3b
 ```
 
-tot1
 
 ```{r,echo=FALSE}
 reg_totsal %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat="identity") +
     scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
     scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
-    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="black") +
+    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="red") +
     geom_text(aes(x=1986,y=.5),label="CBA6",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1990.5,y=.5),label="CBA7",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1997,y=.5),label="CBA8",hjust = 0,color="black",size=3.5) +
@@ -935,16 +969,16 @@ reg_totsal %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),
     geom_vline(aes(xintercept=2006.5),linetype=3, color="black") +
     geom_vline(aes(xintercept=2010.5),linetype=3, color="black") +
     theme(legend.position="none") +
-    labs(title="Correlation of standardized total salary and win percentage by year")
+    labs(title="Correlation of standardized total salary and win percentage by year",
+         x="Year",y="Adjusted R-squared")
 ```
 
-avg1
 
 ```{r,echo=FALSE}
 reg_avgsal %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat="identity") +
     scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
     scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
-    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="red",size=4) +
     geom_text(aes(x=1986,y=.5),label="CBA6",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1990.5,y=.5),label="CBA7",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1997,y=.5),label="CBA8",hjust = 0,color="black",size=3.5) +
@@ -962,14 +996,14 @@ reg_avgsal %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),
          x="Year",y="Adjusted R-squared")
 ```
 
-2
+Average salary seems to have a greater effect than total salary, though both have similar trends. The greatest correlation is during CBA8. Let's see about the effect.
 
 ```{r,echo=FALSE}
 ytext = 7
 reg_avgsal2 %>% ggplot() + geom_bar(aes(yearID,estimate*100,fill=estimate),stat="identity") +
     scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
     scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
-    geom_text(aes(x=1994,y=1),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1994,y=0.25),label="STRIKE",angle=90,hjust = 0,color="red",size=4) +
     geom_text(aes(x=1986,y=ytext),label="CBA6",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1990.5,y=ytext),label="CBA7",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1997,y=ytext),label="CBA8",hjust = 0,color="black",size=3.5) +
@@ -987,14 +1021,14 @@ reg_avgsal2 %>% ggplot() + geom_bar(aes(yearID,estimate*100,fill=estimate),stat=
          x="Year",y="% change for 1 SD increase in avg. salary")
 ```
 
-3a
+Even at its greatest, the effect is relatively small, with about a 4 percent increase in win percentage for a 1 standard deviation increase in average salary in a given year. How about league rank?
 
 ```{r,echo=FALSE}
 ytext = 1.1
 reg_avgsal3a %>% ggplot() + geom_bar(aes(yearID,-estimate,fill=-estimate),stat="identity") +
     scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
     scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
-    geom_text(aes(x=1994,y=0.01),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1994,y=0.05),label="STRIKE",angle=90,hjust = 0,color="red",size=4) +
     geom_text(aes(x=1986,y=ytext),label="CBA6",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1990.5,y=ytext),label="CBA7",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1997,y=ytext),label="CBA8",hjust = 0,color="black",size=3.5) +
@@ -1012,14 +1046,14 @@ reg_avgsal3a %>% ggplot() + geom_bar(aes(yearID,-estimate,fill=-estimate),stat="
          x="Year",y="Increase in rank for a 1 SD increase in avg. salary")
 ```
 
-3b
+The effect size is similarly underwhelming, with a maximum of a ~0.9 increase in league rank for every standard deviation increase in average salary.
 
 ```{r,echo=FALSE}
 ytext = 0.45
 reg_avgsal3b %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared),stat="identity") +
     scale_x_continuous(limits = c(1984,2016), breaks=seq(1985,2015,5)) +
     scale_fill_distiller(palette = "Spectral",breaks=seq(0,70,20),name="Percent") +
-    geom_text(aes(x=1994,y=0.01),label="STRIKE",angle=90,hjust = 0,color="black",size=4) +
+    geom_text(aes(x=1994,y=0.02),label="STRIKE",angle=90,hjust = 0,color="red",size=4) +
     geom_text(aes(x=1986,y=ytext),label="CBA6",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1990.5,y=ytext),label="CBA7",hjust = 0,color="black",size=3.5) +
     geom_text(aes(x=1997,y=ytext),label="CBA8",hjust = 0,color="black",size=3.5) +
@@ -1036,37 +1070,16 @@ reg_avgsal3b %>% ggplot() + geom_bar(aes(yearID,adj.r.squared,fill=adj.r.squared
     labs(title="Correlation of average salary and rank by year",x="Year",y="Adjusted R-squared")
 ```
 
+The correlation between average salary and spending is generally weak, with most adjusted R-squared values below 0.1.
 
-Predict awards
+Overall, the effect of spending more money seems to be small, but perhaps those small margins, combined with other management factors, are enough to translate into a competitive advantage, however transient.
 
+###Conclusion
 
-Conclusion
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+In summary, we have seen that: <br />
+(1) Player salaries have increased over time, but the top rates have done so faster than the lower ones. <br />
+(2) Financial measures taken following the 1994 strike and in successive CBAs seem to have stabilized revenue streams for individual franchises and the overall growth of the league. <br />
+(3) Teams that were previously dominant on paper are less so today, but Major League Baseball remains as competitive as ever. <br />
+(4) Paying more money has a small effect on player and team performance, which has decreased over time.
 
 
