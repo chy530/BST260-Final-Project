@@ -554,7 +554,7 @@ warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=q75WAR)) +
   #scale_y_discrete(labels = rev(allwar$franchID)) +
   scale_fill_gradient(low="#00007F", high="red", name="WAR") +
   geom_vline(aes(xintercept=1994),linetype=3,size=1, color="white") +
-  labs(title="75 percentile WAR by team",x="Year",y="Team/Franchise")
+  labs(title="75th percentile WAR by team",x="Year",y="Team/Franchise")
 ```
 
 The change is less evident here. Let's see if this affected team performance.
@@ -569,6 +569,36 @@ warteam %>% ggplot() + geom_tile(aes(x=yearID,y=factor(franfct),fill=wpct)) +
 ```
 
 There is no disernable pattern here. No team is overly dominant in the league, either before or after the strike. Case in point: Houston, which above is visibly the worst team between 2010-2015, just won the World Series.
+
+But: do better teams win?
+
+```{r,echo=FALSE,message=FALSE}
+warteam %>% ggplot() + geom_point(aes(WARtot,wlratio)) +
+  geom_smooth(aes(WARtot,wlratio))
+```
+
+```{r,echo=FALSE,message=FALSE}
+require(gridExtra)
+date1 = seq(1985,2010,5)
+date2 = seq(1989,2014,5)
+dates = data.frame(date1,date2)
+plots = list()
+
+for(i in 1:6){
+  tmpwar <- warteam %>% filter(yearID > dates$date1[[i]] & yearID <= dates$date2[[i]])
+  wlres <- tmpwar %>% lm(wlratio ~ WARtot,data=.)
+  print(summary(wlres))
+  label = paste(dates$date1[[i]],dates$date2[[i]],sep="-")
+  myplot <- tmpwar %>% ggplot() + geom_point(aes(WARtot,wlratio)) + geom_smooth(aes(WARtot,wlratio)) + labs(title=label,x="Team Total WAR",y="Win/Loss Ratio")
+  newvar = paste("myplot",i,sep="")
+  assign(newvar,myplot)
+  #print(myplot)
+}
+
+grid.arrange(myplot1,myplot2,myplot3,myplot4,myplot5,myplot6,ncol=3)
+```
+
+Yes. More or less.
 
 What kind of players were paid more? Let's look at the year 1995.
 
