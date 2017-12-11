@@ -2,7 +2,7 @@
 title: "Final Project"
 output: html_document
 ---
-
+by Chris Yee
 ```{r setup, include=FALSE}
 #reduce knitr figure size
 knitr::opts_chunk$set(fig.width=6, fig.height=4) 
